@@ -271,19 +271,25 @@ set(TSS2_TCTI_C
   tpm2-tss/src/tss2-tcti/tcti-device.c
   tpm2-tss/src/tss2-tcti/tcti-common.c)
 
+add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/config.h
+  PRE_BUILD
+  DEPENDS ./generate_tpm2_tss_config.sh
+  COMMAND bash -x ${CMAKE_CURRENT_SOURCE_DIR}/generate_tpm2_tss_config.sh)
+
 add_library(tpm2-tss STATIC
   ${UTIL_C}
   ${TSS2_SYS_C}
   ${TSS2_ESYS_C}
   ${TSS2_MU_C}
   ${TSS2_TCTI_C}
+  tpm2-tss/config.h
 )
 
 target_compile_options(tpm2-tss PRIVATE
   -Wno-error
   -DNO_DL
   -DOSSL
-  -DHAVE_CONFIG_H)
+)
 
 target_link_libraries(tpm2-tss PUBLIC oelibc)
 
@@ -295,4 +301,3 @@ target_include_directories(tpm2-tss PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-esys
   /home/paulall/openenclave/3rdparty/openssl/Linux/package/include)
 
-#install(TARGETS tpm2-tss EXPORT openenclave-targets)
