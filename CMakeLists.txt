@@ -7,6 +7,8 @@ project("TPM Sample" LANGUAGES C)
 
 find_package(OpenEnclave CONFIG REQUIRED)
 
+set(oe-gdb-binary `which oe-gdb`)
+
 set(CMAKE_CXX_STANDARD 11)
 
 add_subdirectory(tpm2-tss)
@@ -25,12 +27,12 @@ add_custom_command(OUTPUT enc/tpm_enclave.signed
   COMMAND openenclave::oesign sign ${CMAKE_BINARY_DIR}/enc/tpm_enclave ${CMAKE_SOURCE_DIR}/enc/tpm.conf private_a.pem)
 
 add_custom_target(run
-  DEPENDS tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed
-  COMMAND tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
+  DEPENDS ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed
+  COMMAND sudo ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
 
 add_custom_target(sign
     DEPENDS ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
 
 add_custom_target(debug
     DEPENDS ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed
-    COMMAND oe-gdb --tui --args ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
+    COMMAND sudo ${oe-gdb-binary} --tui --args ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
