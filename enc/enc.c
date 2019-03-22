@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 
 #include <stdio.h>
+#include <sys/mount.h>
 
 #include "tpm_t.h"
 
@@ -12,6 +13,8 @@ void enclave_tpm_list_nv_indexes()
 {
     ESYS_CONTEXT *ectx = NULL;
     TSS2_RC rval;
+
+    int iret = mount("/", "/", "hostfs", 0, NULL);
     
     rval = Esys_Initialize(&ectx, NULL, NULL);
     if (rval == TSS2_RC_SUCCESS)
