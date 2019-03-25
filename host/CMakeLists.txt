@@ -10,4 +10,9 @@ add_executable(tpm_host host.c ${CMAKE_CURRENT_BINARY_DIR}/tpm_u.c)
 target_include_directories(tpm_host PRIVATE
   ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(tpm_host openenclave::oehostapp)
+# Temporary path for oeepoll_host library until it is put in the correct place
+target_link_directories(tpm_host PRIVATE
+  /home/paulall/openenclave-install/lib/openenclave/host)
+
+# oeepoll_host library should be temporary until it is added to the proper oehostapp libraries
+target_link_libraries(tpm_host oeepoll_host openenclave::oehostapp)

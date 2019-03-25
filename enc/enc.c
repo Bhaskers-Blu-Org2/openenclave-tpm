@@ -14,7 +14,15 @@ void enclave_tpm_list_nv_indexes()
     ESYS_CONTEXT *ectx = NULL;
     TSS2_RC rval;
 
+    // Mount the file system to the hostfs driver. This is mapping the root
+    // so all filesystem calls will be routed to the insecure host.
+    // The TPM code opens /dev/tpm0 or /dev/tpmrm0. We could map both these
+    // to the host so no other files accidentally get written.
     int iret = mount("/", "/", "hostfs", 0, NULL);
+    if (iret != 0)
+    {
+        printf("Failed to mount hostfs to '/'");
+    }
     
     rval = Esys_Initialize(&ectx, NULL, NULL);
     if (rval == TSS2_RC_SUCCESS)

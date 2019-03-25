@@ -24,6 +24,7 @@ bool check_simulate_opt(int* argc, const char* argv[])
     return false;
 }
 
+void oe_epoll_install_hostepoll();
 
 int main(int argc, const char* argv[])
 {
@@ -56,6 +57,9 @@ int main(int argc, const char* argv[])
             oe_result_str(result));
         goto exit;
     }
+
+    // Install the epoll OCALL callback
+    oe_epoll_install_hostepoll();
 
     // Call into the enclave
     result = enclave_tpm_list_nv_indexes(enclave);
