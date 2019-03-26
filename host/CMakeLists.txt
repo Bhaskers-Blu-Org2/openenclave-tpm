@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
-add_custom_command(OUTPUT tpm_u.h tpm_u.c
+add_custom_command(OUTPUT tpm_u.h tpm_u.c tpm_args.h
   DEPENDS ${CMAKE_SOURCE_DIR}/tpm.edl
   COMMAND openenclave::oeedger8r --untrusted ${CMAKE_SOURCE_DIR}/tpm.edl)
 

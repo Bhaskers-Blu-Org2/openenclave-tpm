@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
-add_custom_command(OUTPUT tpm_t.h tpm_t.c
+add_custom_command(OUTPUT tpm_t.h tpm_t.c tpm_args.h
   DEPENDS ${CMAKE_SOURCE_DIR}/tpm.edl
   COMMAND openenclave::oeedger8r --trusted ${CMAKE_SOURCE_DIR}/tpm.edl)
 
@@ -14,4 +14,14 @@ target_include_directories(tpm_enclave PRIVATE
   ${CMAKE_CURRENT_BINARY_DIR}
   ${CMAKE_SOURCE_DIR}/tpm2-tss/tpm2-tss/include/tss2)
 
+# Generate key for signing enclave
+add_custom_command(OUTPUT private_a.pem
+  COMMAND openssl genrsa -out private_a.pem -3 3072)
 
+# Sign tpm enclave key signing key
+add_custom_command(OUTPUT tpm_enclave.signed
+  DEPENDS tpm_enclave private_a.pem
+  COMMAND openenclave::oesign sign tpm_enclave ${CMAKE_SOURCE_DIR}/enc/tpm.conf private_a.pem)
+
+add_custom_target(sign ALL
+    DEPENDS tpm_enclave.signed)
