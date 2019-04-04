@@ -1,89 +1,42 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#include <openenclave/enclave.h>
 #include <stdio.h>
 #include <sys/mount.h>
 
-#include "tpm_t.h"
+#include "../tpm/tpm.h"
 
-#include <tss2_esys.h>
-
-
-void enclave_tpm_list_nv_indexes()
+int enclave_tpm_tests()
 {
-    ESYS_CONTEXT *ectx = NULL;
-    TSS2_RC rval;
+    int return_value = 0;
+    int int_return;
 
-    // Mount the file system to the hostfs driver. This is mapping the root
-    // so all filesystem calls will be routed to the insecure host.
-    // The TPM code opens /dev/tpm0 or /dev/tpmrm0. We could map both these
-    // to the host so no other files accidentally get written.
-    int iret = mount("/", "/", "hostfs", 0, NULL);
-    if (iret != 0)
+    oe_enable_feature(OE_FEATURE_HOST_FILES);
+    oe_enable_feature(OE_FEATURE_POLLING);
+
+    int_return = mount("/", "/", "hostfs", 0, NULL);
+    if (int_return != 0)
     {
-        printf("Failed to mount hostfs to '/'");
-    }
-    
-    rval = Esys_Initialize(&ectx, NULL, NULL);
-    if (rval == TSS2_RC_SUCCESS)
-    {
-        printf("Succeeded: Esys_Initialize\n");
-
-        TPMS_CAPABILITY_DATA *capabilityData;
-        rval = Esys_GetCapability(ectx, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, TPM2_CAP_HANDLES, TPM2_HT_NV_INDEX, TPM2_PT_NV_INDEX_MAX, NULL, &capabilityData);
-        if (rval == TSS2_RC_SUCCESS)
-        {
-            printf("Succeeded: Esys_GetCapability\n");
-
-            UINT32 i;
-            for (i = 0; i < capabilityData->data.handles.count; i++)
-            {
-                TPMI_RH_NV_INDEX index = capabilityData->data.handles.handle[i];
-                ESYS_TR tr_object;
-                rval = Esys_TR_FromTPMPublic(ectx, index, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &tr_object);
-                if (rval == TSS2_RC_SUCCESS)
-                {
-                    printf("Succeeded: Esys_TR_FromTPMPublic\n");
-
-                    TPM2B_NV_PUBLIC *nv_public;
-                    rval = Esys_NV_ReadPublic(ectx, tr_object, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &nv_public, NULL);
-                    if (rval == TSS2_RC_SUCCESS)
-                    {
-                        printf("Succeeded: Esys_NV_ReadPublic\n");
-
-                        free(nv_public);
-                    }
-                    else
-                    {
-                        printf("Failed(%u): Esys_NV_ReadPublic\n", rval);
-                    }
-
-                    rval = Esys_TR_Close(ectx, &tr_object);
-                    if (rval == TSS2_RC_SUCCESS)
-                    {
-                        printf("Succeeded: Esys_TR_Close\n");
-                    }
-                    else
-                    {
-                        printf("Failed(%u): Esys_TR_Close\n", rval);
-                    }
-                }
-                else
-                {
-                    printf("Failed(%u): Esys_TR_FromTPMPublic\n", rval);
-                }
-
-            }
-        }
-        else
-        {
-            printf("Failed(%u): Esys_GetCapability, failed to get max number of NV indexes\n", rval);
-        }
-
-        Esys_Finalize(&ectx);
+        printf("Failed to mount hostfs from '/'\n");
+        return_value = -1;
     }
     else
     {
-        printf("Failed(%u): Esys_Initialize\n", rval);
+        int_return = run_tpm_tests();
+        if (int_return != 0)
+        {
+            printf("run_tpm_tests failed\n");
+            return_value = -1;
+        }
+
+        int_return = umount("/");
+        if (int_return != 0)
+        {
+            printf("Failed to unmount hostfs from '/'\n");
+            return_value = -1;
+        }
     }
+
+    return return_value;
 }

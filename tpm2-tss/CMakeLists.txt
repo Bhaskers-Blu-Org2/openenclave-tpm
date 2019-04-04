@@ -272,8 +272,7 @@ set(TSS2_TCTI_C
   tpm2-tss/src/tss2-tcti/tcti-common.c)
 
 add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/config.h
-  PRE_BUILD
-  DEPENDS ./generate_tpm2_tss_config.sh
+  DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/generate_tpm2_tss_config.sh
   COMMAND bash -x ${CMAKE_CURRENT_SOURCE_DIR}/generate_tpm2_tss_config.sh)
 
 add_library(tpm2-tss STATIC
@@ -282,16 +281,15 @@ add_library(tpm2-tss STATIC
   ${TSS2_ESYS_C}
   ${TSS2_MU_C}
   ${TSS2_TCTI_C}
-  tpm2-tss/config.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/config.h
 )
 
-target_compile_options(tpm2-tss PRIVATE
+target_compile_options(tpm2-tss PUBLIC -fPIE
+   PRIVATE
   -Wno-error
   -DNO_DL
   -DOSSL
 )
-
-target_link_libraries(tpm2-tss PUBLIC oelibc)
 
 target_include_directories(tpm2-tss PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/include/tss2
@@ -299,5 +297,5 @@ target_include_directories(tpm2-tss PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-sys
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-esys
-  /home/paulall/openenclave/3rdparty/openssl/Linux/package/include)
+  )
 

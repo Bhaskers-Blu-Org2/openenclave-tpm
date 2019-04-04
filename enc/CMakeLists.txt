@@ -8,7 +8,7 @@ add_custom_command(OUTPUT tpm_t.h tpm_t.c tpm_args.h
 add_executable(tpm_enclave enc.c ${CMAKE_CURRENT_BINARY_DIR}/tpm_t.c)
 
 target_link_directories(tpm_enclave PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/tpm2-tss)
-target_link_libraries(tpm_enclave openenclave::oeenclave openenclave::oelibc tpm2-tss )
+target_link_libraries(tpm_enclave openenclave::oeenclave openenclave::oelibc tpm_common tpm2-tss oe_tssl_crypto)
 
 target_include_directories(tpm_enclave PRIVATE
   ${CMAKE_CURRENT_BINARY_DIR}
@@ -21,7 +21,7 @@ add_custom_command(OUTPUT private_a.pem
 # Sign tpm enclave key signing key
 add_custom_command(OUTPUT tpm_enclave.signed
   DEPENDS tpm_enclave private_a.pem
-  COMMAND openenclave::oesign sign tpm_enclave ${CMAKE_SOURCE_DIR}/enc/tpm.conf private_a.pem)
+  COMMAND openenclave::oesign sign --enclave-image tpm_enclave --config-file ${CMAKE_SOURCE_DIR}/enc/tpm.conf --key-file private_a.pem)
 
 add_custom_target(sign ALL
     DEPENDS tpm_enclave.signed)

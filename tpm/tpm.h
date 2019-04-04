@@ -1,11 +1,4 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
-enclave {
-    trusted {
-        public int enclave_tpm_tests();
-    };
-
-};
-
-
+int run_tpm_tests();
