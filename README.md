@@ -2,7 +2,7 @@
 Experimental, prototype, work in progress, example of how to access the TPM from within an openenclave enclave.
 This project is using unreleased code from the [Open Enclave SDK](https://github.com/microsoft/openenclave) from work-in-progress code branches.
 In fact it uses cascading work in progress branches just to make it more clear that this should not be consumed by anyone yet!
-Which is probably why it does not actually!
+Which is probably why it does not actually work!
 
 You will need an SDX enabled machine or VM for this.
 Your machine or VM needs to have a TPM.
@@ -10,7 +10,7 @@ Probably Linux only at this point, although [tpm2-tss SDK](https://github.com/tp
 I have not tried yet though.
 
 You will need to build and install the [Open Enclave SDK](https://github.com/microsoft/openenclave), although the branch that you need to check-out is ever changing.
-Currently it is `johnkord-openssl_5`.
+Currently it is `johnkord-openssl_6`.
 
 This project depends on [tpm2-tss SDK](https://github.com/tpm2-software/tpm2-tss) as a submodule. 
 Make sure you enlist properly to initialize and sync submodules:
