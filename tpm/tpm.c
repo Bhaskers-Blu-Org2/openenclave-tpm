@@ -655,7 +655,6 @@ int run_tpm_tests()
     {
         printf("\nRunning get_capabilities...\n");
         return_value = tpm_get_capabilities();
-#if 0
         printf("\nRunning get_time...\n");
         return_value = tpm_get_time();
 
@@ -683,7 +682,7 @@ int run_tpm_tests()
 
         printf("\nRunning session-based get_capabilities...\n");
         return_value = tpm_session_get_capabilities();
-#endif
+
         printf("\nRunning tpm_deinitialize...\n");
         return_value = tpm_deinitialize();
     }
