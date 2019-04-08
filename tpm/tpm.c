@@ -156,28 +156,41 @@ int tpm_allocate_nv_counter()
     int return_value = 0;
     uint32_t index_handle = TPM_COUNTER_ID;
     TSS2_RC rc_return;
-    ESYS_TR nvHandle;
+    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
+    ESYS_TR session_handle = ESYS_TR_PASSWORD;
+    ESYS_TR nv_result_handle;
     TPM2B_NV_PUBLIC public_info = {.size = 0};
     TPM2B_AUTH nv_auth = {.size = 0};
 
     public_info.size = sizeof(TPMI_RH_NV_INDEX) + sizeof(TPMI_ALG_HASH) +
                        sizeof(TPMA_NV) + sizeof(UINT16) + sizeof(UINT16);
+
+    /* Index of counter we want to allocate */
     public_info.nvPublic.nvIndex = index_handle;
+
+    /* ??? */
     public_info.nvPublic.nameAlg = TPM2_ALG_SHA256;
+
+    /* Counter is 8 bytes, so allocate 8 bytes of space */
+    public_info.nvPublic.dataSize = 8;
 
     // Now set the attributes.
     // ownerwrite|authwrite|nt=0x1|ownerread|authread|written
-    public_info.nvPublic.attributes = 0x16000620;
+    // NOTE: tpm2_nvlist shows the attributes of this as 0x16000620
+    // whereas we need to pass in 0x60016 to this API.
+    // Now that is confusing!
+    // public_info.nvPublic.attributes = 0x16000620;
+    public_info.nvPublic.attributes = 0x60016;
 
     rc_return = Esys_NV_DefineSpace(
         g_esys_context,
-        ESYS_TR_RH_OWNER,
-        ESYS_TR_NONE,
+        auth_handle,
+        session_handle,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         &nv_auth,
         &public_info,
-        &nvHandle);
+        &nv_result_handle);
     if (rc_return != TPM2_RC_SUCCESS)
     {
         printf(
@@ -198,6 +211,8 @@ int tpm_increment_nv_counter()
     uint32_t index_handle = TPM_COUNTER_ID;
     TSS2_RC rc_return;
     ESYS_TR nv_index;
+    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
+    ESYS_TR session_handle = ESYS_TR_PASSWORD;
 
     rc_return = Esys_TR_FromTPMPublic(
         g_esys_context,
@@ -218,9 +233,9 @@ int tpm_increment_nv_counter()
     {
         rc_return = Esys_NV_Increment(
             g_esys_context,
-            ESYS_TR_RH_OWNER,
+            auth_handle,
             nv_index,
-            ESYS_TR_NONE,
+            session_handle,
             ESYS_TR_NONE,
             ESYS_TR_NONE);
         if (rc_return != TPM2_RC_SUCCESS)
@@ -246,6 +261,8 @@ int tpm_read_nv_counter()
     uint32_t index_handle = TPM_COUNTER_ID;
     TSS2_RC rc_return;
     ESYS_TR nv_index;
+    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
+    ESYS_TR session_handle = ESYS_TR_PASSWORD;
 
     rc_return = Esys_TR_FromTPMPublic(
         g_esys_context,
@@ -268,9 +285,9 @@ int tpm_read_nv_counter()
         // Counter is 8 bytes, offset 0
         rc_return = Esys_NV_Read(
             g_esys_context,
-            ESYS_TR_RH_OWNER,
+            auth_handle,
             nv_index,
-            ESYS_TR_NONE,
+            session_handle,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
             8,
@@ -297,9 +314,50 @@ int tpm_read_nv_counter()
 
 int tpm_delete_nv_counter()
 {
-    return -1;
-}
+    int return_value = 0;
+    uint32_t index_handle = TPM_COUNTER_ID;
+    TSS2_RC rc_return;
+    ESYS_TR nv_index;
+    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
+    ESYS_TR session_handle = ESYS_TR_PASSWORD;
 
+    rc_return = Esys_TR_FromTPMPublic(
+        g_esys_context,
+        index_handle,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &nv_index);
+    if (rc_return != TPM2_RC_SUCCESS)
+    {
+        printf(
+            "Failed(%u): Esys_TR_FromTPMPublic, Not a valid NV index (0x%X)?\n",
+            rc_return,
+            index_handle);
+        return_value = -1;
+    }
+    else
+    {
+        rc_return = Esys_NV_UndefineSpace(
+            g_esys_context,
+            auth_handle,
+            nv_index,
+            session_handle,
+            ESYS_TR_NONE,
+            ESYS_TR_NONE);
+        if (rc_return != TPM2_RC_SUCCESS)
+        {
+            printf(
+                "Failed(%u): Esys_NV_UndefineSpace, Not a valid NV index, or "
+                "not a counter (0x%X)?\n",
+                rc_return,
+                index_handle);
+            return_value = -1;
+        }
+    }
+
+    return return_value;
+}
 // Enumerate all NV indexes and print some information about them
 // This is not using an encrypted session so the host can see and
 // potentially tamper with the data that we receive.
@@ -321,6 +379,9 @@ int tpm_list_nv_indexes()
         &capabilityData);
     if (rc_return == TSS2_RC_SUCCESS)
     {
+        printf(
+            "Succeeded: Esys_GetCapability, Number of used NV Indexes = %u\n",
+            capabilityData->data.handles.count);
         UINT32 i;
         for (i = 0; i < capabilityData->data.handles.count; i++)
         {
@@ -665,6 +726,9 @@ int run_tpm_tests()
         return_value = tpm_allocate_nv_counter();
         if (return_value == 0)
         {
+            printf("\nRunning list_nv_indexes...\n");
+            return_value = tpm_list_nv_indexes();
+
             printf("\nRunning increment_nv_counter...\n");
             return_value = tpm_increment_nv_counter();
 

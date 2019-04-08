@@ -6,8 +6,6 @@
 #include "../tpm/tpm.h"
 #include "tpm_u.h"
 
-//void oe_epoll_install_hostepoll();
-
 bool check_simulate_opt(int* argc, const char* argv[])
 {
     for (int i = 0; i < *argc; i++)
@@ -62,9 +60,6 @@ int main(int argc, const char* argv[])
             oe_result_str(result));
         goto exit;
     }
-
-    // Install the epoll OCALL callback
-    //oe_epoll_install_hostepoll();
 
     // run the tpm tests in the enclave
     result = enclave_tpm_tests(enclave, &ret);
