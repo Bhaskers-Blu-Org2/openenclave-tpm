@@ -15,7 +15,7 @@ add_subdirectory(enc)
 add_subdirectory(host)
 
 add_custom_target(run
-  DEPENDS ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed
+  DEPENDS tpm_enclave tpm_host
   COMMAND sudo ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
 
 add_custom_target(debug

@@ -1,13 +1,10 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT License.
 
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
-// openenclave mount function
-#include <sys/mount.h>
-
-//#include "tpm_t.h"
-
+#include <string.h>
 #include <tss2_esys.h>
 
 // Global TPM context handle used for most top-level TPM APIs
@@ -65,6 +62,219 @@ UINT32 tpm2_util_ntoh_32(UINT32 data)
     return tpm2_util_hton_32(data);
 }
 
+static const char* algorithm_to_string(TPMI_ALG_HASH algorithm)
+{
+    switch (algorithm)
+    {
+        case TPM2_ALG_ERROR:
+            return "TPM2_ALG_ERROR";
+        case TPM2_ALG_RSA:
+            return "TPM2_ALG_RSA";
+        case TPM2_ALG_SHA1:
+            return "TPM2_ALG_SHA1 or TPM2_ALG_SHA";
+        case TPM2_ALG_HMAC:
+            return "TPM2_ALG_HMAC";
+        case TPM2_ALG_AES:
+            return "TPM2_ALG_AES";
+        case TPM2_ALG_MGF1:
+            return "TPM2_ALG_MGF1";
+        case TPM2_ALG_KEYEDHASH:
+            return "TPM2_ALG_KEYEDHASH";
+        case TPM2_ALG_XOR:
+            return "TPM2_ALG_XOR";
+        case TPM2_ALG_SHA256:
+            return "TPM2_ALG_SHA256";
+        case TPM2_ALG_SHA384:
+            return "TPM2_ALG_SHA384";
+        case TPM2_ALG_SHA512:
+            return "TPM2_ALG_SHA512";
+        case TPM2_ALG_NULL:
+            return "TPM2_ALG_NULL";
+        case TPM2_ALG_SM3_256:
+            return "TPM2_ALG_SM3_256";
+        case TPM2_ALG_SM4:
+            return "TPM2_ALG_SM4";
+        case TPM2_ALG_RSASSA:
+            return "TPM2_ALG_RSASSA";
+        case TPM2_ALG_RSAES:
+            return "TPM2_ALG_RSAES";
+        case TPM2_ALG_RSAPSS:
+            return "TPM2_ALG_RSAPSS";
+        case TPM2_ALG_OAEP:
+            return "TPM2_ALG_OAEP";
+        case TPM2_ALG_ECDSA:
+            return "TPM2_ALG_ECDSA";
+        case TPM2_ALG_ECDH:
+            return "TPM2_ALG_ECDH";
+        case TPM2_ALG_ECDAA:
+            return "TPM2_ALG_ECDAA";
+        case TPM2_ALG_SM2:
+            return "TPM2_ALG_SM2";
+        case TPM2_ALG_ECSCHNORR:
+            return "TPM2_ALG_ECSCHNORR";
+        case TPM2_ALG_ECMQV:
+            return "TPM2_ALG_ECMQV";
+        case TPM2_ALG_KDF1_SP800_56A:
+            return "TPM2_ALG_KDF1_SP800_56A";
+        case TPM2_ALG_KDF2:
+            return "TPM2_ALG_KDF2";
+        case TPM2_ALG_KDF1_SP800_108:
+            return "TPM2_ALG_KDF1_SP800_108";
+        case TPM2_ALG_ECC:
+            return "TPM2_ALG_ECC";
+        case TPM2_ALG_SYMCIPHER:
+            return "TPM2_ALG_SYMCIPHER";
+        case TPM2_ALG_CAMELLIA:
+            return "TPM2_ALG_CAMELLIA";
+        case TPM2_ALG_CTR:
+            return "TPM2_ALG_CTR";
+        case TPM2_ALG_SHA3_256:
+            return "TPM2_ALG_SHA3_256";
+        case TPM2_ALG_SHA3_384:
+            return "TPM2_ALG_SHA3_384";
+        case TPM2_ALG_OFB:
+            return "TPM2_ALG_OFB";
+        case TPM2_ALG_CBC:
+            return "TPM2_ALG_CBC";
+        case TPM2_ALG_CFB:
+            return "TPM2_ALG_CFB";
+        case TPM2_ALG_ECB:
+            return "TPM2_ALG_ECB";
+        default:
+            return "<unknown/invalid>";
+    }
+}
+
+static char* nv_attributes_to_string(TPMA_NV attributes)
+{
+    static char buffer[1000];
+
+    buffer[0] = '\0';
+
+    if (attributes & TPMA_NV_PPWRITE)
+    {
+        strcat(buffer, "TPMA_NV_PPWRITE ");
+    }
+    if (attributes & TPMA_NV_OWNERWRITE)
+    {
+        strcat(buffer, "TPMA_NV_OWNERWRITE ");
+    }
+    if (attributes & TPMA_NV_AUTHWRITE)
+    {
+        strcat(buffer, "TPMA_NV_AUTHWRITE ");
+    }
+    if (attributes & TPMA_NV_POLICYWRITE)
+    {
+        strcat(buffer, "TPMA_NV_POLICYWRITE ");
+    }
+    if (attributes & TPMA_NV_POLICY_DELETE)
+    {
+        strcat(buffer, "TPMA_NV_POLICY_DELETE ");
+    }
+    if (attributes & TPMA_NV_WRITELOCKED)
+    {
+        strcat(buffer, "TPMA_NV_WRITELOCKED ");
+    }
+    if (attributes & TPMA_NV_WRITEALL)
+    {
+        strcat(buffer, "TPMA_NV_WRITEALL ");
+    }
+    if (attributes & TPMA_NV_WRITEDEFINE)
+    {
+        strcat(buffer, "TPMA_NV_WRITEDEFINE ");
+    }
+    if (attributes & TPMA_NV_WRITE_STCLEAR)
+    {
+        strcat(buffer, "TPMA_NV_WRITE_STCLEAR ");
+    }
+    if (attributes & TPMA_NV_GLOBALLOCK)
+    {
+        strcat(buffer, "TPMA_NV_GLOBALLOCK ");
+    }
+    if (attributes & TPMA_NV_PPREAD)
+    {
+        strcat(buffer, "TPMA_NV_PPREAD ");
+    }
+    if (attributes & TPMA_NV_OWNERREAD)
+    {
+        strcat(buffer, "TPMA_NV_OWNERREAD ");
+    }
+    if (attributes & TPMA_NV_AUTHREAD)
+    {
+        strcat(buffer, "TPMA_NV_AUTHREAD ");
+    }
+    if (attributes & TPMA_NV_POLICYREAD)
+    {
+        strcat(buffer, "TPMA_NV_POLICYREAD ");
+    }
+    if (attributes & TPMA_NV_RESERVED2_MASK)
+    {
+        strcat(buffer, "TPMA_NV_RESERVED2_MASK ");
+    }
+    if (attributes & TPMA_NV_NO_DA)
+    {
+        strcat(buffer, "TPMA_NV_NO_DA ");
+    }
+    if (attributes & TPMA_NV_ORDERLY)
+    {
+        strcat(buffer, "TPMA_NV_ORDERLY ");
+    }
+    if (attributes & TPMA_NV_CLEAR_STCLEAR)
+    {
+        strcat(buffer, "TPMA_NV_CLEAR_STCLEAR ");
+    }
+    if (attributes & TPMA_NV_READLOCKED)
+    {
+        strcat(buffer, "TPMA_NV_READLOCKED ");
+    }
+    if (attributes & TPMA_NV_WRITTEN)
+    {
+        strcat(buffer, "TPMA_NV_WRITTEN ");
+    }
+    if (attributes & TPMA_NV_PLATFORMCREATE)
+    {
+        strcat(buffer, "TPMA_NV_PLATFORMCREATE ");
+    }
+    if (attributes & TPMA_NV_READ_STCLEAR)
+    {
+        strcat(buffer, "TPMA_NV_READ_STCLEAR ");
+    }
+    switch (attributes & TPMA_NV_TPM2_NT_MASK)
+    {
+        case (TPM2_NT_ORDINARY << TPMA_NV_TPM2_NT_SHIFT):
+        {
+            strcat(buffer, "TPM2_NT_COUNTER ");
+            break;
+        }
+        case (TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT):
+        {
+            strcat(buffer, "TPM2_NT_COUNTER ");
+            break;
+        }
+        case (TPM2_NT_BITS << TPMA_NV_TPM2_NT_SHIFT):
+        {
+            strcat(buffer, "TPM2_NT_BITS ");
+            break;
+        }
+        case (TPM2_NT_EXTEND << TPMA_NV_TPM2_NT_SHIFT):
+        {
+            strcat(buffer, "TPM2_NT_EXTEND ");
+            break;
+        }
+        case (TPM2_NT_PIN_FAIL << TPMA_NV_TPM2_NT_SHIFT):
+        {
+            strcat(buffer, "TPM2_NT_PIN_FAIL ");
+            break;
+        }
+        case (TPM2_NT_PIN_PASS << TPMA_NV_TPM2_NT_SHIFT):
+        {
+            strcat(buffer, "TPM2_NT_PIN_PASS ");
+            break;
+        }
+    }
+    return buffer;
+}
+
 // Initialize anything that is globally used within this enclave.
 // Need to call the deinitialize() function to clean anything up.
 int tpm_initialize()
@@ -106,6 +316,7 @@ int tpm_deinitialize()
     {
         Esys_Finalize(&g_esys_context);
     }
+    return 0;
 }
 
 // get_capabilities is more just a validation that we can actually talk
@@ -175,12 +386,9 @@ int tpm_allocate_nv_counter()
     public_info.nvPublic.dataSize = 8;
 
     // Now set the attributes.
-    // ownerwrite|authwrite|nt=0x1|ownerread|authread|written
-    // NOTE: tpm2_nvlist shows the attributes of this as 0x16000620
-    // whereas we need to pass in 0x60016 to this API.
-    // Now that is confusing!
-    // public_info.nvPublic.attributes = 0x16000620;
-    public_info.nvPublic.attributes = 0x60016;
+    public_info.nvPublic.attributes =
+        (TPMA_NV_OWNERWRITE | TPMA_NV_AUTHWRITE | TPMA_NV_OWNERREAD |
+         TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT);
 
     rc_return = Esys_NV_DefineSpace(
         g_esys_context,
@@ -194,7 +402,8 @@ int tpm_allocate_nv_counter()
     if (rc_return != TPM2_RC_SUCCESS)
     {
         printf(
-            "Failed(%u): Esys_NV_DefineSpace, failed to define index space\n",
+            "Failed(%u): Esys_NV_DefineSpace, failed to define index "
+            "space\n",
             rc_return);
         return_value = -1;
     }
@@ -258,57 +467,95 @@ int tpm_increment_nv_counter()
 int tpm_read_nv_counter()
 {
     int return_value = 0;
-    uint32_t index_handle = TPM_COUNTER_ID;
+    uint32_t index = TPM_COUNTER_ID;
     TSS2_RC rc_return;
-    ESYS_TR nv_index;
+    ESYS_TR tr_object;
     ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
     ESYS_TR session_handle = ESYS_TR_PASSWORD;
 
     rc_return = Esys_TR_FromTPMPublic(
         g_esys_context,
-        index_handle,
+        index,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
-        &nv_index);
-    if (rc_return != TPM2_RC_SUCCESS)
+        &tr_object);
+    if (rc_return == TSS2_RC_SUCCESS)
     {
-        printf(
-            "Failed(%u): Esys_TR_FromTPMPublic, Not a valid NV index (0x%X)?\n",
-            rc_return,
-            index_handle);
-        return_value = -1;
-    }
-    else
-    {
-        TPM2B_MAX_NV_BUFFER* data;
-        // Counter is 8 bytes, offset 0
-        rc_return = Esys_NV_Read(
+        TPM2B_NV_PUBLIC* nv_public;
+        rc_return = Esys_NV_ReadPublic(
             g_esys_context,
-            auth_handle,
-            nv_index,
-            session_handle,
+            tr_object,
             ESYS_TR_NONE,
             ESYS_TR_NONE,
-            8,
-            0,
-            &data);
-        if (rc_return != TPM2_RC_SUCCESS)
+            ESYS_TR_NONE,
+            &nv_public,
+            NULL);
+        if (rc_return == TSS2_RC_SUCCESS)
         {
-            printf(
-                "Failed(%u): Esys_NV_Read, Not a valid NV index, or not a "
-                "counter "
-                "(0x%X)?\n",
-                rc_return,
-                index_handle);
-            return_value = -1;
+            TPM2B_MAX_NV_BUFFER* data;
+            rc_return = Esys_NV_Read(
+                g_esys_context,
+                auth_handle,
+                tr_object,
+                session_handle,
+                ESYS_TR_NONE,
+                ESYS_TR_NONE,
+                nv_public->nvPublic.dataSize,
+                0,
+                &data);
+            if (rc_return != TPM2_RC_SUCCESS)
+            {
+                printf(
+                    "Failed(%u): Esys_NV_Read, Not a valid NV index, or not a "
+                    "counter "
+                    "(0x%X)?\n",
+                    rc_return,
+                    index);
+                return_value = -1;
+            }
+            else
+            {
+                printf(
+                    "NV_Index=0x%X\n"
+                    "\tAlgorithm=%s (0x%hX)\n"
+                    "\tAttributes=%s (0x%X)\n",
+                    index,
+                    algorithm_to_string(nv_public->nvPublic.nameAlg),
+                    nv_public->nvPublic.nameAlg,
+                    nv_attributes_to_string(nv_public->nvPublic.attributes),
+                    nv_public->nvPublic.attributes);
+
+                printf("\tSize=%u BYTES\n", data->size);
+                printf("\tData=<");
+                for (int i = 0; i != data->size; i++)
+                {
+                    printf("%02x", data->buffer[i]);
+                }
+                printf(">\n");
+            }
+
+            free(nv_public);
         }
         else
         {
-            // Hey, lets print out the counter value!
-            printf("Lets print out the counter!");
+            printf("Failed(%u): Esys_NV_ReadPublic\n", rc_return);
+            return_value = -1;
+        }
+
+        rc_return = Esys_TR_Close(g_esys_context, &tr_object);
+        if (rc_return != TSS2_RC_SUCCESS)
+        {
+            printf("Failed(%u): Esys_TR_Close\n", rc_return);
+            return_value = -1;
         }
     }
+    else
+    {
+        printf("Failed(%u): Esys_TR_FromTPMPublic\n", rc_return);
+        return_value = -1;
+    }
+
     return return_value;
 }
 
@@ -408,9 +655,15 @@ int tpm_list_nv_indexes()
                 if (rc_return == TSS2_RC_SUCCESS)
                 {
                     printf(
-                        "NV_Index=0x%X Algorithm=0x%hX Flags=0x%X\n",
+                        "NV_Index=0x%X\n"
+                        "\tdataSize=0x%X\n"
+                        "\tAlgorithm=%s (0x%hX)\n"
+                        "\tAttributes=%s (0x%X)\n",
                         index,
+                        nv_public->nvPublic.dataSize,
+                        algorithm_to_string(nv_public->nvPublic.nameAlg),
                         nv_public->nvPublic.nameAlg,
+                        nv_attributes_to_string(nv_public->nvPublic.attributes),
                         nv_public->nvPublic.attributes);
 
                     free(nv_public);
@@ -422,11 +675,7 @@ int tpm_list_nv_indexes()
                 }
 
                 rc_return = Esys_TR_Close(g_esys_context, &tr_object);
-                if (rc_return == TSS2_RC_SUCCESS)
-                {
-                    printf("Succeeded: Esys_TR_Close\n");
-                }
-                else
+                if (rc_return != TSS2_RC_SUCCESS)
                 {
                     printf("Failed(%u): Esys_TR_Close\n", rc_return);
                     return_value = -1;
@@ -457,165 +706,56 @@ int tpm_get_time()
 {
     int return_value = 0;
     TSS2_RC r;
-    ESYS_TR signHandle = ESYS_TR_NONE;
-    //    int failure_return = EXIT_FAILURE;
+    TPMS_TIME_INFO* currentTime;
 
-    TPM2B_AUTH authValuePrimary = {.size = 5, .buffer = {1, 2, 3, 4, 5}};
+    r = Esys_ReadClock(
+        g_esys_context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &currentTime);
 
-    TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
-        .size = 0,
-        .sensitive =
-            {
-                .userAuth =
-                    {
-                        .size = 0,
-                        .buffer = {0},
-                    },
-                .data =
-                    {
-                        .size = 0,
-                        .buffer = {0},
-                    },
-            },
-    };
-
-    inSensitivePrimary.sensitive.userAuth = authValuePrimary;
-
-    TPM2B_PUBLIC inPublic = {
-        .size = 0,
-        .publicArea =
-            {
-                .type = TPM2_ALG_RSA,
-                .nameAlg = TPM2_ALG_SHA1,
-                .objectAttributes =
-                    (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED |
-                     TPMA_OBJECT_SIGN_ENCRYPT | TPMA_OBJECT_FIXEDTPM |
-                     TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN),
-                .authPolicy =
-                    {
-                        .size = 0,
-                    },
-                .parameters.rsaDetail =
-                    {
-                        .symmetric =
-                            {
-                                .algorithm = TPM2_ALG_NULL,
-                                .keyBits.aes = 128,
-                                .mode.aes = TPM2_ALG_CFB,
-                            },
-                        .scheme =
-                            {
-                                .scheme = TPM2_ALG_RSASSA,
-                                .details = {.rsassa = {.hashAlg =
-                                                           TPM2_ALG_SHA1}},
-
-                            },
-                        .keyBits = 2048,
-                        .exponent = 0,
-                    },
-                .unique.rsa =
-                    {
-                        .size = 0,
-                        .buffer = {},
-                    },
-            },
-    };
-
-    TPM2B_AUTH authValue = {.size = 0, .buffer = {}};
-
-    TPM2B_DATA outsideInfo = {
-        .size = 0,
-        .buffer = {},
-    };
-
-    TPML_PCR_SELECTION creationPCR = {
-        .count = 0,
-    };
-
-    // LOG_INFO("\nRSA key will be created.");
-
-    r = Esys_TR_SetAuth(g_esys_context, ESYS_TR_RH_OWNER, &authValue);
-    // goto_if_error(r, "Error: TR_SetAuth", error);
-
-    // RSRC_NODE_T* primaryHandle_node;
-    TPM2B_PUBLIC* outPublic;
-    TPM2B_CREATION_DATA* creationData;
-    TPM2B_DIGEST* creationHash;
-    TPMT_TK_CREATION* creationTicket;
-
-    r = Esys_CreatePrimary(
-        g_esys_context,
-        ESYS_TR_RH_OWNER,
-        ESYS_TR_PASSWORD,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE,
-        &inSensitivePrimary,
-        &inPublic,
-        &outsideInfo,
-        &creationPCR,
-        &signHandle,
-        &outPublic,
-        &creationData,
-        &creationHash,
-        &creationTicket);
-    // goto_if_error(r, "Error esys create primary", error);
-
-    // r = esys_GetResourceObject(g_esys_context, signHandle,
-    // &primaryHandle_node); goto_if_error(r, "Error Esys GetResourceObject",
-    // error);
-
-    // LOG_INFO(
-    //    "Created Primary with handle 0x%08x...",
-    //    primaryHandle_node->rsrc.handle);
-
-    r = Esys_TR_SetAuth(g_esys_context, signHandle, &authValuePrimary);
-    // goto_if_error(r, "Error: TR_SetAuth", error);
-
-    ESYS_TR privacyAdminHandle = ESYS_TR_RH_ENDORSEMENT;
-    TPMT_SIG_SCHEME inScheme = {.scheme = TPM2_ALG_NULL};
-    TPM2B_DATA qualifyingData = {0};
-    TPM2B_ATTEST* timeInfo;
-    TPMT_SIGNATURE* signature;
-
-    r = Esys_GetTime(
-        g_esys_context,
-        privacyAdminHandle,
-        signHandle,
-        ESYS_TR_PASSWORD,
-        ESYS_TR_PASSWORD,
-        ESYS_TR_NONE,
-        &qualifyingData,
-        &inScheme,
-        &timeInfo,
-        &signature);
     if ((r == TPM2_RC_COMMAND_CODE) ||
         (r == (TPM2_RC_COMMAND_CODE | TSS2_RESMGR_RC_LAYER)) ||
         (r == (TPM2_RC_COMMAND_CODE | TSS2_RESMGR_TPM_RC_LAYER)))
     {
-        //    LOG_WARNING("Command TPM2_GetTime not supported by TPM.");
-        r = Esys_FlushContext(g_esys_context, signHandle);
-        //    goto_if_error(r, "Flushing context", error);
-
-        signHandle = ESYS_TR_NONE;
-        //        failure_return = EXIT_SKIP;
-        goto error;
+        printf("Esys_ReadClock not supported? 0x%X\n", r);
+        return_value = -1;
     }
-    // goto_if_error(r, "Error: GetTime", error);
-
-    r = Esys_FlushContext(g_esys_context, signHandle);
-    // goto_if_error(r, "Error: FlushContext", error);
-
-    return EXIT_SUCCESS;
-
-error:
-
-    if (signHandle != ESYS_TR_NONE)
+    else if (r != TSS2_RC_SUCCESS)
     {
-        if (Esys_FlushContext(g_esys_context, signHandle) != TSS2_RC_SUCCESS)
-        {
-            // LOG_ERROR("Cleanup signHandle failed.");
-        }
+        printf("Esys_ReadClock failed 0x%X\n", r);
+        return_value = -1;
     }
+    else
+    {
+        printf(
+            "Clock=0x%" PRIx64 ", resetCount=0x%" PRIx32
+            ", restartCount=0x%" PRIx32 ", safe=%s, time=0x%" PRIx64 "\n",
+            currentTime->clockInfo.clock,
+            currentTime->clockInfo.resetCount,
+            currentTime->clockInfo.restartCount,
+            (currentTime->clockInfo.safe == TPM2_YES ? "Yes" : "No"),
+            currentTime->time);
+#if 0
+        UINT64 clock; /* time in milliseconds during which the TPM has been
+                        powered. This structure element is used to report on
+                        the TPMs Clock value. The value of Clock shall be
+                        recorded in nonvolatile memory no less often than once
+                        per 69.9 minutes, 222 milliseconds of TPM operation.
+                        The reference for the millisecond timer is the TPM
+                        oscillator. This value is reset to zero when the
+                        Storage Primary Seed is changed TPM2_Clear. This value
+                        may be advanced by TPM2_AdvanceClock. */
+        UINT32 resetCount;   /* number of occurrences of TPM Reset since the
+                                last TPM2_Clear */
+        UINT32 restartCount; /* number of times that TPM2_Shutdown or
+                                _TPM_Hash_Start have occurred since the last
+                                TPM Reset or TPM2_Clear. */
+        TPMI_YES_NO safe;    /* no value of Clock greater than the current
+                                value of Clock has been previously reported by
+                                the TPM. Set to YES on TPM2_Clear. */
+    UINT64 time;               /* time in milliseconds since the last _TPM_Init or 
+                                TPM2_Startup. This structure element is used to report on the TPMs Time value. */
+#endif
+    }
+
     return return_value;
 }
 
@@ -666,7 +806,7 @@ int tpm_session_get_capabilities()
             if (rc_return == TSS2_RC_SUCCESS)
             {
                 printf(
-                    "Succeeded: Esys_GetCapability, handle count=%u\n",
+                    "Succeeded: Esys_GetCapability, NV Index count=%u\n",
                     capabilityData->data.handles.count);
             }
             else
@@ -750,4 +890,6 @@ int run_tpm_tests()
         printf("\nRunning tpm_deinitialize...\n");
         return_value = tpm_deinitialize();
     }
+
+    return return_value;
 }
