@@ -16,7 +16,7 @@ This project depends on [tpm2-tss SDK](https://github.com/tpm2-software/tpm2-tss
 Make sure you enlist properly to initialize and sync submodules:
 
 ```bash
-git clone --recurse-submodules https://github.com/paulcallen/openenclave-tpm
+git clone --recurse-submodules https://github.com/openenclave/openenclave-tpm
 ```
 This will pull down the submodule properly during clone.
 

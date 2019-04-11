@@ -60,7 +60,6 @@ int main(int argc, const char* argv[])
             oe_result_str(result));
         goto exit;
     }
-
     // run the tpm tests in the enclave
     result = enclave_tpm_tests(enclave, &ret);
     if (result != OE_OK)
@@ -76,7 +75,6 @@ int main(int argc, const char* argv[])
     {
         fprintf(stderr, "enclave_tpm_tests returned error, %i", ret);
     }
-
     ret = 0;
 
 exit:
