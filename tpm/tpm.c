@@ -658,13 +658,15 @@ int tpm_list_nv_indexes()
                         "NV_Index=0x%X\n"
                         "\tdataSize=0x%X\n"
                         "\tAlgorithm=%s (0x%hX)\n"
-                        "\tAttributes=%s (0x%X)\n",
+                        "\tAttributes=%s (0x%X)\n"
+                        "\tAuthorization policy length=0x%X\n",
                         index,
                         nv_public->nvPublic.dataSize,
                         algorithm_to_string(nv_public->nvPublic.nameAlg),
                         nv_public->nvPublic.nameAlg,
                         nv_attributes_to_string(nv_public->nvPublic.attributes),
-                        nv_public->nvPublic.attributes);
+                        nv_public->nvPublic.attributes,
+                        nv_public->nvPublic.authPolicy.size);
 
                     free(nv_public);
                 }
@@ -705,22 +707,22 @@ int tpm_list_nv_indexes()
 int tpm_get_time()
 {
     int return_value = 0;
-    TSS2_RC r;
+    TSS2_RC rc_return;
     TPMS_TIME_INFO* currentTime;
 
-    r = Esys_ReadClock(
+    rc_return = Esys_ReadClock(
         g_esys_context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &currentTime);
 
-    if ((r == TPM2_RC_COMMAND_CODE) ||
-        (r == (TPM2_RC_COMMAND_CODE | TSS2_RESMGR_RC_LAYER)) ||
-        (r == (TPM2_RC_COMMAND_CODE | TSS2_RESMGR_TPM_RC_LAYER)))
+    if ((rc_return == TPM2_RC_COMMAND_CODE) ||
+        (rc_return == (TPM2_RC_COMMAND_CODE | TSS2_RESMGR_RC_LAYER)) ||
+        (rc_return == (TPM2_RC_COMMAND_CODE | TSS2_RESMGR_TPM_RC_LAYER)))
     {
-        printf("Esys_ReadClock not supported? 0x%X\n", r);
+        printf("Esys_ReadClock not supported? 0x%X\n", rc_return);
         return_value = -1;
     }
-    else if (r != TSS2_RC_SUCCESS)
+    else if (rc_return != TSS2_RC_SUCCESS)
     {
-        printf("Esys_ReadClock failed 0x%X\n", r);
+        printf("Esys_ReadClock failed 0x%X\n", rc_return);
         return_value = -1;
     }
     else
@@ -759,19 +761,29 @@ int tpm_get_time()
     return return_value;
 }
 
-// Get some capabilities from the TPM using a session that protects
-// the data such that the enclave host cannot see the data that is
-// being passed back and forth between the enclave and the TPM.
-int tpm_session_get_capabilities()
-{
-    int return_value = 0;
-    TSS2_RC rc_return;
-    ESYS_TR auth_session = ESYS_TR_NONE;
-    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_XOR,
-                              .keyBits = {.exclusiveOr = TPM2_ALG_SHA1},
-                              .mode = {.aes = TPM2_ALG_CFB}};
-    TPMS_CAPABILITY_DATA* capabilityData;
+#define goto_if_error(rc_return, msg, label)  \
+    if (rc_return != TSS2_RC_SUCCESS)         \
+    {                                         \
+        printf("%s, 0x%X\n", msg, rc_return); \
+        goto label;                           \
+    }
 
+// Test an operation using an encrypted session
+int tpm_encrypted_session()
+{
+    TSS2_RC rc_return;
+    int return_value = 0;
+    ESYS_TR nv_handle = ESYS_TR_NONE;
+    ESYS_TR session_enc = ESYS_TR_NONE;
+    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
+                              .keyBits = {.aes = 128},
+                              .mode = {.aes = TPM2_ALG_CFB}};
+
+    TPM2B_NONCE nonce_caller = {
+        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
+
+    /* Enc param session */
     rc_return = Esys_StartAuthSession(
         g_esys_context,
         ESYS_TR_NONE,
@@ -779,71 +791,126 @@ int tpm_session_get_capabilities()
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
-        NULL,
+        &nonce_caller,
         TPM2_SE_HMAC,
         &symmetric,
         TPM2_ALG_SHA1,
-        &auth_session);
-    if (rc_return == TSS2_RC_SUCCESS)
-    {
-        rc_return = Esys_TRSess_SetAttributes(
-            g_esys_context,
-            auth_session,
-            TPMA_SESSION_DECRYPT | TPMA_SESSION_ENCRYPT,
-            TPMA_SESSION_DECRYPT | TPMA_SESSION_ENCRYPT);
-        if (rc_return == TSS2_RC_SUCCESS)
-        {
-            rc_return = Esys_GetCapability(
-                g_esys_context,
-                auth_session,
-                ESYS_TR_NONE,
-                ESYS_TR_NONE,
-                TPM2_CAP_HANDLES,
-                tpm2_util_hton_32(TPM2_HT_NV_INDEX),
-                TPM2_PT_NV_INDEX_MAX,
-                NULL,
-                &capabilityData);
-            if (rc_return == TSS2_RC_SUCCESS)
-            {
-                printf(
-                    "Succeeded: Esys_GetCapability, NV Index count=%u\n",
-                    capabilityData->data.handles.count);
-            }
-            else
-            {
-                printf(
-                    "Failed(%u): Esys_GetCapability, failed to get max number "
-                    "of NV "
-                    "indexes\n",
-                    rc_return);
-                return_value = -1;
-            }
-        }
-        else
-        {
-            printf(
-                "Failed(%u): Esys_TRSess_SetAttributes, failed to set session "
-                "attributes\n",
-                rc_return);
-            return_value = -1;
-        }
+        &session_enc);
+    goto_if_error(
+        rc_return, "Error: During initialization of session_enc", error);
 
-        rc_return = Esys_FlushContext(g_esys_context, auth_session);
-        if (rc_return != TSS2_RC_SUCCESS)
+    /* Set both ENC and DEC flags for the enc session */
+    TPMA_SESSION session_attributes = TPMA_SESSION_DECRYPT |
+                                      TPMA_SESSION_ENCRYPT |
+                                      TPMA_SESSION_CONTINUESESSION;
+
+    rc_return = Esys_TRSess_SetAttributes(
+        g_esys_context, session_enc, session_attributes, 0xFF);
+    goto_if_error(rc_return, "Error: During SetAttributes", error);
+
+    TPM2B_AUTH auth = {.size = 20,
+                       .buffer = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                                  20, 21, 22, 23, 24, 25, 26, 27, 28, 29}};
+
+    TPM2B_NV_PUBLIC public_info = {
+        .size = 0,
+        .nvPublic = {
+            .nvIndex = TPM_COUNTER_ID,
+            .nameAlg = TPM2_ALG_SHA1,
+            .attributes =
+                (TPMA_NV_OWNERWRITE | TPMA_NV_AUTHWRITE | TPMA_NV_OWNERREAD |
+                 TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
+            .authPolicy =
+                {
+                    .size = 0,
+                    .buffer = {},
+                },
+            .dataSize = 8,
+        }};
+
+    rc_return = Esys_NV_DefineSpace(
+        g_esys_context,
+        ESYS_TR_RH_OWNER,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &auth,
+        &public_info,
+        &nv_handle);
+    goto_if_error(rc_return, "Error esys define nv space", error);
+
+    rc_return = Esys_NV_Increment(
+        g_esys_context,
+        nv_handle,
+        nv_handle,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE);
+    goto_if_error(rc_return, "Error esys nv write", error);
+
+    TPM2B_MAX_NV_BUFFER* data;
+
+    rc_return = Esys_NV_Read(
+        g_esys_context,
+        nv_handle,
+        nv_handle,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        8,
+        0,
+        &data);
+    goto_if_error(rc_return, "Error: nv read", error);
+
+    printf("\nSecured index data:\n");
+    printf("\tSize=%u BYTES\n", data->size);
+    printf("\tData=<");
+    for (int i = 0; i != data->size; i++)
+    {
+        printf("%02x", data->buffer[i]);
+    }
+    printf(">\n");
+
+    free(data);
+
+    printf("\nIndex enumeration:\n");
+    tpm_list_nv_indexes();
+
+    printf("\nRead NV counter\n");
+    tpm_read_nv_counter();
+
+error:
+    if (rc_return)
+        return_value = -1;
+
+    if (nv_handle != ESYS_TR_NONE)
+    {
+        if (Esys_NV_UndefineSpace(
+                g_esys_context,
+                ESYS_TR_RH_OWNER,
+                nv_handle,
+                session_enc,
+                ESYS_TR_NONE,
+                ESYS_TR_NONE) != TSS2_RC_SUCCESS)
         {
-            printf("Failed(%u): Esys_FlushContext failed]n", rc_return);
-            return_value = -1;
+            printf("Cleanup nv_handle failed.");
         }
     }
-    else
+
+    if (session_enc != ESYS_TR_NONE)
     {
-        printf(
-            "Failed(%u): Esys_StartAuthSession, failed to initialize session",
-            rc_return);
-        return_value = -1;
+        if (Esys_FlushContext(g_esys_context, session_enc) != TSS2_RC_SUCCESS)
+        {
+            printf("Cleanup session_enc failed.");
+        }
     }
 
     return return_value;
+}
+
+int tpm_policy_protected_session()
+{
+    return 0;
 }
 
 int run_tpm_tests()
@@ -877,15 +944,20 @@ int run_tpm_tests()
 
             printf("\nRunning delete_nv_counter...\n");
             return_value = tpm_delete_nv_counter();
+
+            printf("\nRunning list_nv_indexes...\n");
+            return_value = tpm_list_nv_indexes();
         }
         else
         {
             printf(
                 "\nSkipping rest of NV tests due to NV allocation failure\n");
         }
+        printf("\nRunning encrypted session test...\n");
+        return_value = tpm_encrypted_session();
 
-        printf("\nRunning session-based get_capabilities...\n");
-        return_value = tpm_session_get_capabilities();
+        printf("\nRunning policy based session test...\n");
+        return_value = tpm_policy_protected_session();
 
         printf("\nRunning tpm_deinitialize...\n");
         return_value = tpm_deinitialize();
