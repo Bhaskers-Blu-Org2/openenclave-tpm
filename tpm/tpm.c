@@ -346,7 +346,7 @@ int tpm_get_capabilities()
             "Succeeded: Esys_GetCapability, Number of used NV Indexes = %u\n",
             capabilityData->data.handles.count);
 
-        free(capabilityData);
+        Esys_Free(capabilityData);
     }
     else
     {
@@ -535,10 +535,10 @@ int tpm_read_nv_counter()
                     printf("%02x", data->buffer[i]);
                 }
                 printf(">\n");
-                free(data);
+                Esys_Free(data);
             }
 
-            free(nv_public);
+            Esys_Free(nv_public);
         }
         else
         {
@@ -671,7 +671,7 @@ int tpm_list_nv_indexes()
                         nv_public->nvPublic.attributes,
                         nv_public->nvPublic.authPolicy.size);
 
-                    free(nv_public);
+                    Esys_Free(nv_public);
                 }
                 else
                 {
@@ -693,7 +693,7 @@ int tpm_list_nv_indexes()
             }
         }
 
-        free(capabilityData);
+        Esys_Free(capabilityData);
     }
     else
     {
@@ -762,7 +762,7 @@ int tpm_get_time()
                                 TPM2_Startup. This structure element is used to report on the TPMs Time value. */
 #endif
 
-        free(currentTime);
+        Esys_Free(currentTime);
     }
 
     return return_value;
@@ -879,7 +879,7 @@ int tpm_encrypted_session()
     }
     printf(">\n");
 
-    free(data);
+    Esys_Free(data);
 
     // List the indexes. Ours will be there
     printf("\nIndex enumeration:\n");
