@@ -345,6 +345,8 @@ int tpm_get_capabilities()
         printf(
             "Succeeded: Esys_GetCapability, Number of used NV Indexes = %u\n",
             capabilityData->data.handles.count);
+
+        free(capabilityData);
     }
     else
     {
@@ -533,6 +535,7 @@ int tpm_read_nv_counter()
                     printf("%02x", data->buffer[i]);
                 }
                 printf(">\n");
+                free(data);
             }
 
             free(nv_public);
@@ -689,6 +692,8 @@ int tpm_list_nv_indexes()
                 return_value = -1;
             }
         }
+
+        free(capabilityData);
     }
     else
     {
@@ -756,6 +761,8 @@ int tpm_get_time()
     UINT64 time;               /* time in milliseconds since the last _TPM_Init or 
                                 TPM2_Startup. This structure element is used to report on the TPMs Time value. */
 #endif
+
+        free(currentTime);
     }
 
     return return_value;
@@ -850,6 +857,7 @@ int tpm_encrypted_session()
 
     TPM2B_MAX_NV_BUFFER* data;
 
+    // Read encrypted
     rc_return = Esys_NV_Read(
         g_esys_context,
         nv_handle,
@@ -873,9 +881,13 @@ int tpm_encrypted_session()
 
     free(data);
 
+    // List the indexes. Ours will be there
     printf("\nIndex enumeration:\n");
     tpm_list_nv_indexes();
 
+    // Read the counter unencrypted. This works and the host will be
+    // able to see what we are reading.
+    // As there is no policy on the counter we are able to read it too.
     printf("\nRead NV counter\n");
     tpm_read_nv_counter();
 
@@ -916,6 +928,8 @@ int tpm_policy_protected_session()
 int run_tpm_tests()
 {
     int return_value;
+
+    printf("\nStarting tpm_tests...\n");
 
     printf("\nRunning tpm_initialize...\n");
     return_value = tpm_initialize();
@@ -962,6 +976,7 @@ int run_tpm_tests()
         printf("\nRunning tpm_deinitialize...\n");
         return_value = tpm_deinitialize();
     }
+    printf("\nFinished tpm_tests...\n");
 
     return return_value;
 }

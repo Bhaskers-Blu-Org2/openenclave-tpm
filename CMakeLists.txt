@@ -19,6 +19,5 @@ add_custom_target(run
   COMMAND sudo ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
 
 add_custom_target(debug
-    DEPENDS ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed
-# COMMAND sudo $<TARGET_FILE:openenclave::oegdb> --tui --args ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
-    COMMAND sudo ~/openenclave-install/bin/oegdb --tui --args ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)
+  DEPENDS ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed
+  COMMAND sudo $<TARGET_FILE:openenclave::oegdb> --tui --args ${CMAKE_BINARY_DIR}/host/tpm_host ${CMAKE_BINARY_DIR}/enc/tpm_enclave.signed)

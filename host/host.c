@@ -48,6 +48,8 @@ int main(int argc, const char* argv[])
 
     printf("\nRunning tests in enclave....\n");
 
+    printf("Starting enclave...\n");
+
     // Create the enclave
     result = oe_create_tpm_enclave(
         argv[1], OE_ENCLAVE_TYPE_AUTO, flags, NULL, 0, &enclave);
@@ -60,6 +62,9 @@ int main(int argc, const char* argv[])
             oe_result_str(result));
         goto exit;
     }
+
+    printf("Calling into enclave...\n");
+
     // run the tpm tests in the enclave
     result = enclave_tpm_tests(enclave, &ret);
     if (result != OE_OK)
@@ -80,7 +85,12 @@ int main(int argc, const char* argv[])
 exit:
     // Clean up the enclave if we created one
     if (enclave)
+    {
+        printf("\nTerminating enclave...\n");
         oe_terminate_enclave(enclave);
+    }
+
+    printf("\nDone!\n");
 
     return ret;
 }

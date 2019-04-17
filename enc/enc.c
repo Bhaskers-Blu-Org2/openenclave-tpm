@@ -12,8 +12,8 @@ int enclave_tpm_tests()
     int return_value = 0;
     int int_return;
 
-    oe_enable_feature(OE_FEATURE_HOST_FILES);
-    oe_enable_feature(OE_FEATURE_POLLING);
+    oe_load_module_hostfs();
+    oe_load_module_polling();
 
     int_return = mount("/", "/", "hostfs", 0, NULL);
     if (int_return != 0)
