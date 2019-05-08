@@ -32,10 +32,10 @@ int main(int argc, const char* argv[])
         flags |= OE_ENCLAVE_FLAG_SIMULATE;
     }
 
-    if (argc != 2)
+    if ((argc != 1 )&& (argc != 2))
     {
         fprintf(
-            stderr, "Usage: %s enclave_image_path [ --simulate  ]\n", argv[0]);
+            stderr, "Usage: %s [ enclave_image_path ] [ --simulate  ]\n", argv[0]);
         goto exit;
     }
 
@@ -46,39 +46,46 @@ int main(int argc, const char* argv[])
         fprintf(stderr, "Tests failed to run in host %d\n", ret);
     }
 
-    printf("\nRunning tests in enclave....\n");
-
-    printf("Starting enclave...\n");
-
-    // Create the enclave
-    result = oe_create_tpm_enclave(
-        argv[1], OE_ENCLAVE_TYPE_AUTO, flags, NULL, 0, &enclave);
-    if (result != OE_OK)
+    if (argc == 2)
     {
-        fprintf(
-            stderr,
-            "oe_create_tpm_enclave(): result=%u (%s)\n",
-            result,
-            oe_result_str(result));
-        goto exit;
+        printf("\nRunning tests in enclave....\n");
+
+        printf("Starting enclave...\n");
+
+        // Create the enclave
+        result = oe_create_tpm_enclave(
+            argv[1], OE_ENCLAVE_TYPE_AUTO, flags, NULL, 0, &enclave);
+        if (result != OE_OK)
+        {
+            fprintf(
+                stderr,
+                "oe_create_tpm_enclave(): result=%u (%s)\n",
+                result,
+                oe_result_str(result));
+            goto exit;
+        }
+
+        printf("Calling into enclave...\n");
+
+        // run the tpm tests in the enclave
+        result = enclave_tpm_tests(enclave, &ret);
+        if (result != OE_OK)
+        {
+            fprintf(
+                stderr,
+                "calling into enclave_tpm_tests failed: result=%u (%s)\n",
+                result,
+                oe_result_str(result));
+            goto exit;
+        }
+        else if (ret != 0)
+        {
+            fprintf(stderr, "enclave_tpm_tests returned error, %i", ret);
+        }
     }
-
-    printf("Calling into enclave...\n");
-
-    // run the tpm tests in the enclave
-    result = enclave_tpm_tests(enclave, &ret);
-    if (result != OE_OK)
+    else
     {
-        fprintf(
-            stderr,
-            "calling into enclave_tpm_tests failed: result=%u (%s)\n",
-            result,
-            oe_result_str(result));
-        goto exit;
-    }
-    else if (ret != 0)
-    {
-        fprintf(stderr, "enclave_tpm_tests returned error, %i", ret);
+        printf("\nSkipping enclave tests. Add enclave library path to command line to enable\n");
     }
     ret = 0;
 
