@@ -18,7 +18,6 @@ target_link_directories(tpm_host PRIVATE
 
 # oeepoll_host library should be temporary until it is added to the proper oehostapp libraries
 target_link_libraries(tpm_host 
-  oeepoll_host 
   openenclave::oehostapp 
   tpm_common
   tpm2-tss crypto)

@@ -12,10 +12,10 @@ int enclave_tpm_tests()
     int return_value = 0;
     int int_return;
 
-    oe_load_module_hostfs();
-    oe_load_module_polling();
+    oe_load_module_host_file_system();
+    oe_load_module_host_epoll();
 
-    int_return = mount("/", "/", "hostfs", 0, NULL);
+    int_return = mount("/", "/", OE_HOST_FILE_SYSTEM, 0, NULL);
     if (int_return != 0)
     {
         printf("Failed to mount hostfs from '/'\n");
