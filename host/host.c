@@ -32,15 +32,19 @@ int main(int argc, const char* argv[])
         flags |= OE_ENCLAVE_FLAG_SIMULATE;
     }
 
-    if ((argc != 1 )&& (argc != 2))
+    if ((argc != 1) && (argc != 2))
     {
         fprintf(
-            stderr, "Usage: %s [ enclave_image_path ] [ --simulate  ]\n", argv[0]);
+            stderr,
+            "Usage: %s [ enclave_image_path ] [ --simulate  ]\n",
+            argv[0]);
         goto exit;
     }
 
     printf("Running tests in host....\n");
-    int ret = run_tpm_tests();
+    uint8_t insecure_seal_key[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                                   11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+    int ret = run_tpm_tests(NULL, sizeof(insecure_seal_key));
     if (ret != 0)
     {
         fprintf(stderr, "Tests failed to run in host %d\n", ret);
@@ -85,7 +89,8 @@ int main(int argc, const char* argv[])
     }
     else
     {
-        printf("\nSkipping enclave tests. Add enclave library path to command line to enable\n");
+        printf("\nSkipping enclave tests. Add enclave library path to command "
+               "line to enable\n");
     }
     ret = 0;
 

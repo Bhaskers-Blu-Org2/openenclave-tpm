@@ -23,10 +23,34 @@ int enclave_tpm_tests()
     }
     else
     {
-        int_return = run_tpm_tests();
-        if (int_return != 0)
+        uint8_t* seal_key = NULL;
+        size_t seal_key_size = 0;
+        uint8_t* info = NULL;
+        size_t info_size = 0;
+
+        // Get a seal key from the enclave itself to secure communication to the
+        // session with the TPM itself. This makes sure the unsecure host, that
+        // performs the actual IO on our behalf, cannot see the data.
+        oe_result_t oe_result = oe_get_seal_key_by_policy(
+            OE_SEAL_POLICY_UNIQUE,
+            &seal_key,
+            &seal_key_size,
+            &info,
+            &info_size);
+        if (oe_result == OE_OK)
         {
-            printf("run_tpm_tests failed\n");
+            int_return = run_tpm_tests(seal_key, seal_key_size);
+            if (int_return != 0)
+            {
+                printf("run_tpm_tests failed\n");
+                return_value = -1;
+            }
+            oe_free_key(seal_key, seal_key_size, info, info_size);
+        }
+        else
+        {
+            printf(
+                "Failed: oe_get_seal_key_by_policy returned %u\n", oe_result);
             return_value = -1;
         }
 

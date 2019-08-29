@@ -776,7 +776,7 @@ int tpm_get_time()
     }
 
 // Test an operation using an encrypted session
-int tpm_encrypted_session()
+int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
 {
     TSS2_RC rc_return;
     int return_value = 0;
@@ -786,6 +786,8 @@ int tpm_encrypted_session()
                               .keyBits = {.aes = 128},
                               .mode = {.aes = TPM2_ALG_CFB}};
 
+    // Note! This is really bad! The nonce should be random to ensure
+    // freshness of hte session
     TPM2B_NONCE nonce_caller = {
         .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
                                11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
@@ -815,9 +817,19 @@ int tpm_encrypted_session()
         g_esys_context, session_enc, session_attributes, 0xFF);
     goto_if_error(rc_return, "Error: During SetAttributes", error);
 
-    TPM2B_AUTH auth = {.size = 20,
-                       .buffer = {10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-                                  20, 21, 22, 23, 24, 25, 26, 27, 28, 29}};
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
+    if (seal_key_size && seal_key)
+    {
+        if (seal_key_size > 64)
+        {
+            printf("Error: seal key is too long!\n");
+            return_value = -1;
+            goto error;
+        }
+        auth.size = seal_key_size;
+        memcpy(auth.buffer, seal_key, seal_key_size);
+        printf("Seal key has been set\n");
+    }
 
     TPM2B_NV_PUBLIC public_info = {
         .size = 0,
@@ -925,7 +937,10 @@ int tpm_policy_protected_session()
     return 0;
 }
 
-int run_tpm_tests()
+// Pass in the seal key used for the encryption tests.
+// Within enclave this should be the enclave sealing key.
+// In the host this will be, well, something else!
+int run_tpm_tests(uint8_t* seal_key, size_t seal_key_size)
 {
     int return_value;
 
@@ -968,7 +983,7 @@ int run_tpm_tests()
                 "\nSkipping rest of NV tests due to NV allocation failure\n");
         }
         printf("\nRunning encrypted session test...\n");
-        return_value = tpm_encrypted_session();
+        return_value = tpm_encrypted_session(seal_key, seal_key_size);
 
         printf("\nRunning policy based session test...\n");
         return_value = tpm_policy_protected_session();
