@@ -1,6 +1,27 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+# directory under the binaries directory where we copy tpm2-tss to.
+# Under this directory we do the auto configure
+set(TPM2_TSS_DIR ${CMAKE_CURRENT_BINARY_DIR}/tpm2-tss)
+
+# Only need this to generate the config.h file, but it generates loads of other files so we need
+# to do the whole thing in the binary directory
+include (ExternalProject)
+ExternalProject_Add(tpm2-tss-external
+  DOWNLOAD_COMMAND
+    ${CMAKE_COMMAND} -E copy_directory
+      ${CMAKE_CURRENT_LIST_DIR}/tpm2-tss
+      ${TPM2_TSS_DIR}
+  CONFIGURE_COMMAND
+    ${CMAKE_COMMAND} -E chdir ${TPM2_TSS_DIR} /bin/bash -x ${TPM2_TSS_DIR}/bootstrap
+  COMMAND
+    ${CMAKE_COMMAND} -E chdir ${TPM2_TSS_DIR} /bin/bash -x ${TPM2_TSS_DIR}/configure --disable-tcti-mssim --enable-nodl --with-crypto=ossl
+  BUILD_COMMAND ""
+  INSTALL_COMMAND ""
+    )
+
+# All the source files from tpm2-tss that we should need
 set(UTIL_C 
   tpm2-tss/src/util/io.c 
   tpm2-tss/src/util/key-value-parse.c 
@@ -280,22 +301,27 @@ add_library(tpm2-tss STATIC
   ${TSS2_TCTI_C}
 )
 
+# Copy to build directory and generate config.h file
+add_dependencies(tpm2-tss tpm2-tss-external)
+
 target_compile_options(tpm2-tss 
   PUBLIC
+    # OE needs PIE format
     -fPIE
   PRIVATE
-    -Wno-error
-    -DNO_DL
-    -DOSSL
-    -DMAXLOGLEVEL=0
-    -DTCTI_DEVICE
+    # Need to force load our own config.h file otherwise it will find some other
+    # random one of the system and it won't have what we need in it
+    -include ${TPM2_TSS_DIR}/config.h
 )
 
 target_include_directories(tpm2-tss PRIVATE
+  ${TPM2_TSS_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/include/tss2
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-sys
   ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-esys
- )
+)
 
+# Clean the exteral directory
+set_property(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${TPM2_TSS_DIR})
