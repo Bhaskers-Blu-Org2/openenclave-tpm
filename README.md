@@ -3,10 +3,8 @@
 Experimental, prototype, work in progress, example of how to access the TPM from within an Open Enclave enclave.
 This project is built using libraries and headers from [Open Enclave SDK](https://github.com/openenclave/openenclave).
 
-You will need an Intel SGX enabled machine or VM for this, along with the necessary SGX drivers.
+You will need an Intel SGX enabled Linux machine or Linux VM for this, along with the necessary SGX drivers.
 Your machine or VM needs to have a TPM (or vTPM in the case of a VM).
-Probably Linux only at this point, although [tpm2-tss SDK](https://github.com/tpm2-software/tpm2-tss) says Windows is experimentally supported.
-I have not tried yet though.
 
 You will need to install the [Open Enclave SDK](https://github.com/openenclave/openenclave). You can either enlist, build and install it, or you can just install a pre-built package. Make sure you install all the prerequisite packages. Once installed you will need to source the installed Open Enclave environment file so that this project can find libraries and headers.
 
@@ -62,6 +60,8 @@ And when the code works this will be a great sample!
 * Access to the TPM is done through async file access. The enclave does not have direct access to these APIs and so we need to do an ocall from the enclave to the unsecure host. Open Enclave SDK does this for us so the TPM libraries call open() and our CRT will do what is necessary to make it work. If no encryption is used on the TPM operations the data passed around can be seen so secrets can be stolen. This sample has some tests that don't encrypt the session operations, and some that do. The enclave now uses the TEE seal key for encryption for those tests that enable the encryption.
 
 * The tpm2-tss library uses OpenSSL. This library is used for various reasons, from random numbers to encryption. The default random number generator in OpenSSL in some cases call out to the processor RDTSC instruction which is not available from within the enclave as it is considered insecure. This is one of the reason we are depending on the Open Enclave OpenSSL repository rather than just using OpenSSL libraries directly.
+
+* This project only works on Linux as the enclave is always a Linux ELF format and so [tpm2-tss SDK](https://github.com/tpm2-software/tpm2-tss) will be built to work against a Linux TPM device in /dev/tpm0. To make this work we would need to significantly change the usage of tpm2-tss such that it creates the packets but does not send them. Then the enclave would need to do an ocall to the host to either send it to /dev/tpm0 on Linux, or call the Windows TPM APIs directly. Well, I think this is what would be needed!
 
 # Contributing
 
