@@ -932,17 +932,179 @@ error:
     return return_value;
 }
 
-int tpm_policy_protected_session()
+int tpm_policy_protected_session(uint8_t* seal_key, size_t seal_key_size)
 {
-    return 0;
-}
+    int return_value = 0;
+#if 0
+    TSS2_RC rc_return;
+    ESYS_TR nv_handle = ESYS_TR_NONE;
+    ESYS_TR session_enc = ESYS_TR_NONE;
+    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
+                              .keyBits = {.aes = 128},
+                              .mode = {.aes = TPM2_ALG_CFB}};
 
+    // Note! This is really bad! The nonce should be random to ensure
+    // freshness of hte session
+    TPM2B_NONCE nonce_caller = {
+        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
+
+    /* Enc param session */
+    rc_return = Esys_StartAuthSession(
+        g_esys_context,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &nonce_caller,
+        TPM2_SE_HMAC,
+        &symmetric,
+        TPM2_ALG_SHA1,
+        &session_enc);
+    goto_if_error(
+        rc_return, "Error: During initialization of session_enc", error);
+
+    /* Set both ENC and DEC flags for the enc session */
+    TPMA_SESSION session_attributes = TPMA_SESSION_DECRYPT |
+                                      TPMA_SESSION_ENCRYPT |
+                                      TPMA_SESSION_CONTINUESESSION;
+
+    rc_return = Esys_TRSess_SetAttributes(
+        g_esys_context, session_enc, session_attributes, 0xFF);
+    goto_if_error(rc_return, "Error: During SetAttributes", error);
+
+    rc_return = Esys_PolicyPassword(
+        g_esys_context,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE
+        );
+    goto_if_error(rc_return, "Error: During Esys_PolicyPassword", error);
+
+
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
+    if (seal_key_size && seal_key)
+    {
+        if (seal_key_size > 64)
+        {
+            printf("Error: seal key is too long!\n");
+            return_value = -1;
+            goto error;
+        }
+        auth.size = seal_key_size;
+        memcpy(auth.buffer, seal_key, seal_key_size);
+        printf("Seal key has been set\n");
+    }
+
+    TPM2B_NV_PUBLIC public_info = {
+        .size = 0,
+        .nvPublic = {
+            .nvIndex = TPM_COUNTER_ID,
+            .nameAlg = TPM2_ALG_SHA1,
+            .attributes =
+                (TPMA_NV_OWNERWRITE | TPMA_NV_AUTHWRITE | TPMA_NV_OWNERREAD |
+                 TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
+            .authPolicy =
+                {
+                    .size = 0,
+                    .buffer = {},
+                },
+            .dataSize = 8,
+        }};
+
+    rc_return = Esys_NV_DefineSpace(
+        g_esys_context,
+        ESYS_TR_RH_OWNER,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &auth,
+        &public_info,
+        &nv_handle);
+    goto_if_error(rc_return, "Error esys define nv space", error);
+
+    rc_return = Esys_NV_Increment(
+        g_esys_context,
+        nv_handle,
+        nv_handle,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE);
+    goto_if_error(rc_return, "Error esys nv write", error);
+
+    TPM2B_MAX_NV_BUFFER* data;
+
+    // Read encrypted
+    rc_return = Esys_NV_Read(
+        g_esys_context,
+        nv_handle,
+        nv_handle,
+        session_enc,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        8,
+        0,
+        &data);
+    goto_if_error(rc_return, "Error: nv read", error);
+
+    printf("\nSecured index data:\n");
+    printf("\tSize=%u BYTES\n", data->size);
+    printf("\tData=<");
+    for (int i = 0; i != data->size; i++)
+    {
+        printf("%02x", data->buffer[i]);
+    }
+    printf(">\n");
+
+    Esys_Free(data);
+
+    // List the indexes. Ours will be there
+    printf("\nIndex enumeration:\n");
+    tpm_list_nv_indexes();
+
+    // Read the counter unencrypted. This works and the host will be
+    // able to see what we are reading.
+    // As there is no policy on the counter we are able to read it too.
+    printf("\nRead NV counter\n");
+    tpm_read_nv_counter();
+
+error:
+    if (rc_return)
+        return_value = -1;
+
+    if (nv_handle != ESYS_TR_NONE)
+    {
+        if (Esys_NV_UndefineSpace(
+                g_esys_context,
+                ESYS_TR_RH_OWNER,
+                nv_handle,
+                session_enc,
+                ESYS_TR_NONE,
+                ESYS_TR_NONE) != TSS2_RC_SUCCESS)
+        {
+            printf("Cleanup nv_handle failed.");
+        }
+    }
+
+    if (session_enc != ESYS_TR_NONE)
+    {
+        if (Esys_FlushContext(g_esys_context, session_enc) != TSS2_RC_SUCCESS)
+        {
+            printf("Cleanup session_enc failed.");
+        }
+    }
+#endif
+    return return_value;
+}
 // Pass in the seal key used for the encryption tests.
 // Within enclave this should be the enclave sealing key.
 // In the host this will be, well, something else!
 int run_tpm_tests(uint8_t* seal_key, size_t seal_key_size)
 {
     int return_value;
+    int master_return_value = 0;
 
     printf("\nStarting tpm_tests...\n");
 
@@ -952,11 +1114,24 @@ int run_tpm_tests(uint8_t* seal_key, size_t seal_key_size)
     {
         printf("\nRunning get_capabilities...\n");
         return_value = tpm_get_capabilities();
+        if (return_value != 0)
+        {
+            master_return_value = return_value;
+        }
+
         printf("\nRunning get_time...\n");
         return_value = tpm_get_time();
+        if (return_value != 0)
+        {
+            master_return_value = return_value;
+        }
 
         printf("\nRunning list_nv_indexes...\n");
         return_value = tpm_list_nv_indexes();
+        if (return_value != 0)
+        {
+            master_return_value = return_value;
+        }
 
         printf("\nRunning allocate_nv_counter...\n");
         return_value = tpm_allocate_nv_counter();
@@ -964,34 +1139,72 @@ int run_tpm_tests(uint8_t* seal_key, size_t seal_key_size)
         {
             printf("\nRunning list_nv_indexes...\n");
             return_value = tpm_list_nv_indexes();
+            if (return_value != 0)
+            {
+                master_return_value = return_value;
+            }
 
             printf("\nRunning increment_nv_counter...\n");
             return_value = tpm_increment_nv_counter();
+            if (return_value != 0)
+            {
+                master_return_value = return_value;
+            }
 
             printf("\nRunning read_nv_counter...\n");
             return_value = tpm_read_nv_counter();
+            if (return_value != 0)
+            {
+                master_return_value = return_value;
+            }
 
             printf("\nRunning delete_nv_counter...\n");
             return_value = tpm_delete_nv_counter();
+            if (return_value != 0)
+            {
+                master_return_value = return_value;
+            }
 
             printf("\nRunning list_nv_indexes...\n");
             return_value = tpm_list_nv_indexes();
+            if (return_value != 0)
+            {
+                master_return_value = return_value;
+            }
         }
         else
         {
             printf(
                 "\nSkipping rest of NV tests due to NV allocation failure\n");
+            master_return_value = return_value;
         }
+
         printf("\nRunning encrypted session test...\n");
         return_value = tpm_encrypted_session(seal_key, seal_key_size);
+        if (return_value != 0)
+        {
+            master_return_value = return_value;
+        }
 
         printf("\nRunning policy based session test...\n");
-        return_value = tpm_policy_protected_session();
+        return_value = tpm_policy_protected_session(seal_key, seal_key_size);
+        if (return_value != 0)
+        {
+            master_return_value = return_value;
+        }
 
         printf("\nRunning tpm_deinitialize...\n");
         return_value = tpm_deinitialize();
+        if (return_value != 0)
+        {
+            master_return_value = return_value;
+        }
+    }
+    else
+    {
+        master_return_value = return_value;
     }
     printf("\nFinished tpm_tests...\n");
 
-    return return_value;
+    return master_return_value;
 }
