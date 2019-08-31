@@ -7,8 +7,12 @@ add_custom_command(OUTPUT tpm_t.h tpm_t.c tpm_args.h
 
 add_executable(tpm_enclave enc.c ${CMAKE_CURRENT_BINARY_DIR}/tpm_t.c)
 
-target_link_directories(tpm_enclave PRIVATE /opt/oe-openssl/lib ${CMAKE_CURRENT_BINARY_DIR}/tpm2-tss )
-target_link_libraries(tpm_enclave openenclave::oeenclave openenclave::oelibc openenclave::oehostepoll  openenclave::oehostfs tpm_common tpm2-tss liboeopensslcrypto.a)
+target_link_directories(tpm_enclave PRIVATE /opt/oe-openssl/lib ${CMAKE_CURRENT_BINARY_DIR}/../tpm2-tss )
+target_link_libraries(tpm_enclave 
+  openenclave::oeenclave openenclave::oelibc openenclave::oehostepoll  openenclave::oehostfs 
+  tpm_common 
+  libtss2-esys.a  libtss2-mu.a  libtss2-rc.a  libtss2-sys.a  libtss2-tcti-device.a  libtss2-tctildr.a  libutil.a 
+  liboeopensslcrypto.a)
 
 target_include_directories(tpm_enclave PRIVATE
   ${CMAKE_CURRENT_BINARY_DIR}

@@ -14,10 +14,11 @@ target_include_directories(tpm_host PRIVATE
 # Temporary path for oeepoll_host library until it is put in the correct place
 target_link_directories(tpm_host PRIVATE
   /home/paulall/openenclave-install/lib/openenclave/host
-  ${CMAKE_CURRENT_BINARY_DIR}/tpm2-tss)
+  ${CMAKE_CURRENT_BINARY_DIR}/../tpm2-tss)
 
 # oeepoll_host library should be temporary until it is added to the proper oehostapp libraries
 target_link_libraries(tpm_host 
   openenclave::oehostapp 
   tpm_common
-  tpm2-tss crypto)
+  libtss2-esys.a  libtss2-mu.a  libtss2-rc.a  libtss2-sys.a  libtss2-tcti-device.a  libtss2-tctildr.a  libutil.a 
+  crypto)

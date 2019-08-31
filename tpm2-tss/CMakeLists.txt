@@ -16,312 +16,47 @@ ExternalProject_Add(tpm2-tss-external
   CONFIGURE_COMMAND
     ${CMAKE_COMMAND} -E chdir ${TPM2_TSS_DIR} /bin/bash -x ${TPM2_TSS_DIR}/bootstrap
   COMMAND
-    ${CMAKE_COMMAND} -E chdir ${TPM2_TSS_DIR} /bin/bash -x ${TPM2_TSS_DIR}/configure --disable-tcti-mssim --enable-nodl --with-crypto=ossl
-  BUILD_COMMAND ""
-  INSTALL_COMMAND ""
+    ${CMAKE_COMMAND} -E chdir ${TPM2_TSS_DIR} /bin/bash -x ${TPM2_TSS_DIR}/configure --disable-tcti-mssim --enable-nodl --with-crypto=ossl --disable-doxygen-doc --disable-doxygen-man --disable-doxygen-rtf --disable-doxygen-html --disable-shared 
+  BUILD_COMMAND 
+    ${CMAKE_COMMAND} -E chdir ${TPM2_TSS_DIR} make -j
+  INSTALL_COMMAND 
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/src/tss2-mu/.libs/libtss2-mu.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libtss2-mu.a
+  COMMAND
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/src/tss2-sys/.libs/libtss2-sys.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libtss2-sys.a
+  COMMAND
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/src/tss2-esys/.libs/libtss2-esys.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libtss2-esys.a
+  COMMAND
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/src/tss2-rc/.libs/libtss2-rc.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libtss2-rc.a
+  COMMAND
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/src/tss2-tcti/.libs/libtss2-tctildr.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libtss2-tctildr.a
+  COMMAND
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/src/tss2-tcti/.libs/libtss2-tcti-device.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libtss2-tcti-device.a
+  COMMAND
+    ${CMAKE_COMMAND} -E copy
+    ${TPM2_TSS_DIR}/.libs/libutil.a
+    ${CMAKE_CURRENT_BINARY_DIR}/libutil.a
     )
 
-# All the source files from tpm2-tss that we should need
-set(UTIL_C 
-  tpm2-tss/src/util/io.c 
-  tpm2-tss/src/util/key-value-parse.c 
-  tpm2-tss/src/util/log.c)
-set(TSS2_SYS_C
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_AC_GetCapability.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_AC_Send.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ActivateCredential.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Certify.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_CertifyCreation.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ChangeEPS.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ChangePPS.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Clear.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ClearControl.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ClockRateAdjust.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ClockSet.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Commit.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ContextLoad.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ContextSave.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Create.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_CreateLoaded.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_CreatePrimary.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_DictionaryAttackLockReset.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_DictionaryAttackParameters.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Duplicate.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ECC_Parameters.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ECDH_KeyGen.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ECDH_ZGen.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_EC_Ephemeral.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_EncryptDecrypt.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_EncryptDecrypt2.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_EventSequenceComplete.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_EvictControl.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Execute.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_FieldUpgradeData.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_FieldUpgradeStart.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Finalize.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_FirmwareRead.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_FlushContext.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetCapability.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetCommandAuditDigest.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetCommandCode.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetContextSize.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetCpBuffer.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetDecryptParam.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetEncryptParam.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetRandom.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetRpBuffer.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetRspAuths.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetSessionAuditDigest.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetTctiContext.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetTestResult.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_GetTime.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_HMAC.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_HMAC_Start.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Hash.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_HashSequenceStart.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_HierarchyChangeAuth.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_HierarchyControl.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Import.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_IncrementalSelfTest.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Initialize.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Load.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_LoadExternal.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_MakeCredential.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_Certify.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_ChangeAuth.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_DefineSpace.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_Extend.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_GlobalWriteLock.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_Increment.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_Read.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_ReadLock.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_ReadPublic.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_SetBits.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_UndefineSpace.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_UndefineSpaceSpecial.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_Write.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_NV_WriteLock.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ObjectChangeAuth.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_Allocate.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_Event.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_Extend.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_Read.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_Reset.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_SetAuthPolicy.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PCR_SetAuthValue.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PP_Commands.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyAuthValue.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyAuthorize.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyAuthorizeNV.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyCommandCode.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyCounterTimer.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyCpHash.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyDuplicationSelect.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyGetDigest.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyLocality.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyNV.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyNameHash.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyNvWritten.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyOR.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyPCR.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyPassword.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyPhysicalPresence.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyRestart.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicySecret.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicySigned.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyTemplate.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_PolicyTicket.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Policy_AC_SendSelect.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Quote.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_RSA_Decrypt.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_RSA_Encrypt.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ReadClock.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ReadPublic.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Rewrap.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SelfTest.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SequenceComplete.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SequenceUpdate.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SetAlgorithmSet.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SetCmdAuths.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SetCommandCodeAuditStatus.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SetDecryptParam.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SetEncryptParam.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_SetPrimaryPolicy.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Shutdown.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Sign.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_StartAuthSession.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Startup.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_StirRandom.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_TestParms.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Unseal.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_Vendor_TCG_Test.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_VerifySignature.c
-  tpm2-tss/src/tss2-sys/api/Tss2_Sys_ZGen_2Phase.c
-  tpm2-tss/src/tss2-sys/sysapi_util.c )
-set(TSS2_ESYS_C
-  tpm2-tss/src/tss2-esys/api/Esys_ActivateCredential.c
-  tpm2-tss/src/tss2-esys/api/Esys_Certify.c
-  tpm2-tss/src/tss2-esys/api/Esys_CertifyCreation.c
-  tpm2-tss/src/tss2-esys/api/Esys_ChangeEPS.c
-  tpm2-tss/src/tss2-esys/api/Esys_ChangePPS.c
-  tpm2-tss/src/tss2-esys/api/Esys_Clear.c
-  tpm2-tss/src/tss2-esys/api/Esys_ClearControl.c
-  tpm2-tss/src/tss2-esys/api/Esys_ClockRateAdjust.c
-  tpm2-tss/src/tss2-esys/api/Esys_ClockSet.c
-  tpm2-tss/src/tss2-esys/api/Esys_Commit.c
-  tpm2-tss/src/tss2-esys/api/Esys_ContextLoad.c
-  tpm2-tss/src/tss2-esys/api/Esys_ContextSave.c
-  tpm2-tss/src/tss2-esys/api/Esys_Create.c
-  tpm2-tss/src/tss2-esys/api/Esys_CreateLoaded.c
-  tpm2-tss/src/tss2-esys/api/Esys_CreatePrimary.c
-  tpm2-tss/src/tss2-esys/api/Esys_DictionaryAttackLockReset.c
-  tpm2-tss/src/tss2-esys/api/Esys_DictionaryAttackParameters.c
-  tpm2-tss/src/tss2-esys/api/Esys_Duplicate.c
-  tpm2-tss/src/tss2-esys/api/Esys_ECC_Parameters.c
-  tpm2-tss/src/tss2-esys/api/Esys_ECDH_KeyGen.c
-  tpm2-tss/src/tss2-esys/api/Esys_ECDH_ZGen.c
-  tpm2-tss/src/tss2-esys/api/Esys_EC_Ephemeral.c
-  tpm2-tss/src/tss2-esys/api/Esys_EncryptDecrypt.c
-  tpm2-tss/src/tss2-esys/api/Esys_EncryptDecrypt2.c
-  tpm2-tss/src/tss2-esys/api/Esys_EventSequenceComplete.c
-  tpm2-tss/src/tss2-esys/api/Esys_EvictControl.c
-  tpm2-tss/src/tss2-esys/api/Esys_FieldUpgradeData.c
-  tpm2-tss/src/tss2-esys/api/Esys_FieldUpgradeStart.c
-  tpm2-tss/src/tss2-esys/api/Esys_FirmwareRead.c
-  tpm2-tss/src/tss2-esys/api/Esys_FlushContext.c
-  tpm2-tss/src/tss2-esys/api/Esys_GetCapability.c
-  tpm2-tss/src/tss2-esys/api/Esys_GetCommandAuditDigest.c
-  tpm2-tss/src/tss2-esys/api/Esys_GetRandom.c
-  tpm2-tss/src/tss2-esys/api/Esys_GetSessionAuditDigest.c
-  tpm2-tss/src/tss2-esys/api/Esys_GetTestResult.c
-  tpm2-tss/src/tss2-esys/api/Esys_GetTime.c
-  tpm2-tss/src/tss2-esys/api/Esys_HMAC.c
-  tpm2-tss/src/tss2-esys/api/Esys_HMAC_Start.c
-  tpm2-tss/src/tss2-esys/api/Esys_Hash.c
-  tpm2-tss/src/tss2-esys/api/Esys_HashSequenceStart.c
-  tpm2-tss/src/tss2-esys/api/Esys_HierarchyChangeAuth.c
-  tpm2-tss/src/tss2-esys/api/Esys_HierarchyControl.c
-  tpm2-tss/src/tss2-esys/api/Esys_Import.c
-  tpm2-tss/src/tss2-esys/api/Esys_IncrementalSelfTest.c
-  tpm2-tss/src/tss2-esys/api/Esys_Load.c
-  tpm2-tss/src/tss2-esys/api/Esys_LoadExternal.c
-  tpm2-tss/src/tss2-esys/api/Esys_MakeCredential.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_Certify.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_ChangeAuth.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_DefineSpace.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_Extend.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_GlobalWriteLock.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_Increment.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_Read.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_ReadLock.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_ReadPublic.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_SetBits.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_UndefineSpace.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_UndefineSpaceSpecial.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_Write.c
-  tpm2-tss/src/tss2-esys/api/Esys_NV_WriteLock.c
-  tpm2-tss/src/tss2-esys/api/Esys_ObjectChangeAuth.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_Allocate.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_Event.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_Extend.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_Read.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_Reset.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_SetAuthPolicy.c
-  tpm2-tss/src/tss2-esys/api/Esys_PCR_SetAuthValue.c
-  tpm2-tss/src/tss2-esys/api/Esys_PP_Commands.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyAuthValue.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyAuthorize.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyAuthorizeNV.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyCommandCode.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyCounterTimer.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyCpHash.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyDuplicationSelect.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyGetDigest.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyLocality.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyNV.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyNameHash.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyNvWritten.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyOR.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyPCR.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyPassword.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyPhysicalPresence.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyRestart.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicySecret.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicySigned.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyTemplate.c
-  tpm2-tss/src/tss2-esys/api/Esys_PolicyTicket.c
-  tpm2-tss/src/tss2-esys/api/Esys_Quote.c
-  tpm2-tss/src/tss2-esys/api/Esys_RSA_Decrypt.c
-  tpm2-tss/src/tss2-esys/api/Esys_RSA_Encrypt.c
-  tpm2-tss/src/tss2-esys/api/Esys_ReadClock.c
-  tpm2-tss/src/tss2-esys/api/Esys_ReadPublic.c
-  tpm2-tss/src/tss2-esys/api/Esys_Rewrap.c
-  tpm2-tss/src/tss2-esys/api/Esys_SelfTest.c
-  tpm2-tss/src/tss2-esys/api/Esys_SequenceComplete.c
-  tpm2-tss/src/tss2-esys/api/Esys_SequenceUpdate.c
-  tpm2-tss/src/tss2-esys/api/Esys_SetAlgorithmSet.c
-  tpm2-tss/src/tss2-esys/api/Esys_SetCommandCodeAuditStatus.c
-  tpm2-tss/src/tss2-esys/api/Esys_SetPrimaryPolicy.c
-  tpm2-tss/src/tss2-esys/api/Esys_Shutdown.c
-  tpm2-tss/src/tss2-esys/api/Esys_Sign.c
-  tpm2-tss/src/tss2-esys/api/Esys_StartAuthSession.c
-  tpm2-tss/src/tss2-esys/api/Esys_Startup.c
-  tpm2-tss/src/tss2-esys/api/Esys_StirRandom.c
-  tpm2-tss/src/tss2-esys/api/Esys_TestParms.c
-  tpm2-tss/src/tss2-esys/api/Esys_Unseal.c
-  tpm2-tss/src/tss2-esys/api/Esys_Vendor_TCG_Test.c
-  tpm2-tss/src/tss2-esys/api/Esys_VerifySignature.c
-  tpm2-tss/src/tss2-esys/api/Esys_ZGen_2Phase.c
-  tpm2-tss/src/tss2-esys/esys_context.c
-  tpm2-tss/src/tss2-esys/esys_crypto.c
-  tpm2-tss/src/tss2-esys/esys_free.c
-  tpm2-tss/src/tss2-esys/esys_iutil.c
-  tpm2-tss/src/tss2-esys/esys_mu.c
-  tpm2-tss/src/tss2-esys/esys_tr.c
-  tpm2-tss/src/tss2-esys/esys_crypto_ossl.c )
-set(TSS2_MU_C
-  tpm2-tss/src/tss2-mu/base-types.c
-  tpm2-tss/src/tss2-mu/tpm2b-types.c
-  tpm2-tss/src/tss2-mu/tpma-types.c
-  tpm2-tss/src/tss2-mu/tpml-types.c
-  tpm2-tss/src/tss2-mu/tpms-types.c
-  tpm2-tss/src/tss2-mu/tpmt-types.c
-  tpm2-tss/src/tss2-mu/tpmu-types.c )
-set(TSS2_TCTI_C
-  tpm2-tss/src/tss2-tcti/tctildr.c
-  tpm2-tss/src/tss2-tcti/tctildr-nodl.c
-  tpm2-tss/src/tss2-tcti/tcti-device.c
-  tpm2-tss/src/tss2-tcti/tcti-common.c)
-
-add_library(tpm2-tss STATIC
-  ${UTIL_C}
-  ${TSS2_SYS_C}
-  ${TSS2_ESYS_C}
-  ${TSS2_MU_C}
-  ${TSS2_TCTI_C}
-)
-
-# Copy to build directory and generate config.h file
-add_dependencies(tpm2-tss tpm2-tss-external)
-
-target_compile_options(tpm2-tss 
-  PUBLIC
-    # OE needs PIE format
-    -fPIE
-  PRIVATE
-    # Need to force load our own config.h file otherwise it will find some other
-    # random one of the system and it won't have what we need in it
-    -include ${TPM2_TSS_DIR}/config.h
-)
-
-target_include_directories(tpm2-tss PRIVATE
+# Clean the exteral directory and copied libraries
+set_property(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES 
   ${TPM2_TSS_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/include/tss2
-  ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src
-  ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss
-  ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-sys
-  ${CMAKE_CURRENT_SOURCE_DIR}/tpm2-tss/src/tss2-esys
+  ${CMAKE_CURRENT_BINARY_DIR}/libtss2-mu.a
+  ${CMAKE_CURRENT_BINARY_DIR}/libtss2-sys.a
+  ${CMAKE_CURRENT_BINARY_DIR}/libtss2-esys.a
+  ${CMAKE_CURRENT_BINARY_DIR}/libtss2-rc.a
+  ${CMAKE_CURRENT_BINARY_DIR}/libtss2-tctildr.a
+  ${CMAKE_CURRENT_BINARY_DIR}/libtss2-tcti-device.a
+  ${CMAKE_CURRENT_BINARY_DIR}/libutil.a
 )
-
-# Clean the exteral directory
-set_property(DIRECTORY PROPERTY ADDITIONAL_MAKE_CLEAN_FILES ${TPM2_TSS_DIR})
