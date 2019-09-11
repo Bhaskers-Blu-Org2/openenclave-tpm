@@ -6,6 +6,60 @@
 #include <stdlib.h>
 #include <string.h>
 #include <tss2_esys.h>
+#include <tss2_rc.h>
+
+#define test_starting(running_in_enclave, test)                                \
+    {                                                                          \
+        printf("\n***********************************************************" \
+               "***************\n");                                           \
+        printf(                                                                \
+            "** Running[%s]: %s\n",                                            \
+            running_in_enclave ? "enclave" : "host",                           \
+            test);                                                             \
+    }
+
+#define test_finished(_return_code, running_in_enclave, test, error_label)     \
+    if (_return_code != 0)                                                     \
+    {                                                                          \
+        printf(                                                                \
+            "** Failed[%s]: %s\n",                                             \
+            running_in_enclave ? "enclave" : "host",                           \
+            test);                                                             \
+        printf("*************************************************************" \
+               "*************\n");                                             \
+        return_value = (_return_code);                                         \
+        goto error_label;                                                      \
+    }                                                                          \
+    else                                                                       \
+    {                                                                          \
+        printf(                                                                \
+            "** Passed[%s]: %s\n",                                             \
+            running_in_enclave ? "enclave" : "host",                           \
+            test);                                                             \
+        printf("*************************************************************" \
+               "*************\n");                                             \
+    }
+
+#define run_test(running_in_enclave, test, error_label)                \
+    {                                                                  \
+        test_starting(running_in_enclave, #test);                      \
+        test_finished(test(), running_in_enclave, #test, error_label); \
+    }
+
+#define run_test_with_seal_key(                                         \
+    running_in_enclave, test, seal_key, seal_key_size, error_label)     \
+    {                                                                   \
+        test_starting(running_in_enclave, #test);                       \
+        int _result = test(seal_key, seal_key_size);                    \
+        test_finished(_result, running_in_enclave, #test, error_label); \
+    }
+
+#define goto_if_tss_error(rc_return, msg, label)                             \
+    if (rc_return != TSS2_RC_SUCCESS)                                        \
+    {                                                                        \
+        printf("%s, 0x%X, %s\n", msg, rc_return, Tss2_RC_Decode(rc_return)); \
+        goto label;                                                          \
+    }
 
 // Global TPM context handle used for most top-level TPM APIs
 static ESYS_CONTEXT* g_esys_context = NULL;
@@ -326,7 +380,7 @@ int tpm_deinitialize()
 // potentially tamper with the data that we receive.
 int tpm_get_capabilities()
 {
-    int return_value = 0;
+    int return_value = -1;
     TSS2_RC rc_return;
     TPMS_CAPABILITY_DATA* capabilityData;
 
@@ -340,23 +394,21 @@ int tpm_get_capabilities()
         TPM2_PT_NV_INDEX_MAX,
         NULL,
         &capabilityData);
-    if (rc_return == TSS2_RC_SUCCESS)
-    {
-        printf(
-            "Succeeded: Esys_GetCapability, Number of used NV Indexes = %u\n",
-            capabilityData->data.handles.count);
 
-        Esys_Free(capabilityData);
-    }
-    else
-    {
-        printf(
-            "Failed(%u): Esys_GetCapability, failed to get max number of NV "
-            "indexes\n",
-            rc_return);
-        return_value = -1;
-    }
+    goto_if_tss_error(
+        rc_return,
+        "Esys_GetCapability, failed to get max number of NV indexes",
+        error);
 
+    printf(
+        "Succeeded: Esys_GetCapability, Number of used NV Indexes = %u\n",
+        capabilityData->data.handles.count);
+
+    Esys_Free(capabilityData);
+
+    return_value = 0;
+
+error:
     return return_value;
 }
 
@@ -366,7 +418,7 @@ int tpm_get_capabilities()
 // potentially tamper with the data that we receive.
 int tpm_allocate_nv_counter()
 {
-    int return_value = 0;
+    int return_value = -1;
     uint32_t index_handle = TPM_COUNTER_ID;
     TSS2_RC rc_return;
     ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
@@ -401,14 +453,13 @@ int tpm_allocate_nv_counter()
         &nv_auth,
         &public_info,
         &nv_result_handle);
-    if (rc_return != TPM2_RC_SUCCESS)
-    {
-        printf(
-            "Failed(%u): Esys_NV_DefineSpace, failed to define index "
-            "space\n",
-            rc_return);
-        return_value = -1;
-    }
+
+    goto_if_tss_error(
+        rc_return, "Esys_NV_DefineSpace, failed to define index space", error);
+
+    return_value = 0;
+
+error:
     return return_value;
 }
 
@@ -418,7 +469,7 @@ int tpm_allocate_nv_counter()
 // potentially tamper with the data that we receive.
 int tpm_increment_nv_counter()
 {
-    int return_value = 0;
+    int return_value = -1;
     uint32_t index_handle = TPM_COUNTER_ID;
     TSS2_RC rc_return;
     ESYS_TR nv_index;
@@ -432,34 +483,26 @@ int tpm_increment_nv_counter()
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         &nv_index);
-    if (rc_return != TPM2_RC_SUCCESS)
-    {
-        printf(
-            "Failed(%u): Esys_TR_FromTPMPublic, Not a valid NV index (0x%X)?\n",
-            rc_return,
-            index_handle);
-        return_value = -1;
-    }
-    else
-    {
-        rc_return = Esys_NV_Increment(
-            g_esys_context,
-            auth_handle,
-            nv_index,
-            session_handle,
-            ESYS_TR_NONE,
-            ESYS_TR_NONE);
-        if (rc_return != TPM2_RC_SUCCESS)
-        {
-            printf(
-                "Failed(%u): Esys_NV_Increment, Not a valid NV index, or not a "
-                "counter (0x%X)?\n",
-                rc_return,
-                index_handle);
-            return_value = -1;
-        }
-    }
 
+    goto_if_tss_error(
+        rc_return, "Esys_NV_DefineSpace, failed to define index space", error);
+
+    rc_return = Esys_NV_Increment(
+        g_esys_context,
+        auth_handle,
+        nv_index,
+        session_handle,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE);
+
+    goto_if_tss_error(
+        rc_return,
+        "Esys_NV_Increment, Not a valid NV index, or not a counter",
+        error);
+
+    return_value = 0;
+
+error:
     return return_value;
 }
 
@@ -768,13 +811,6 @@ int tpm_get_time()
     return return_value;
 }
 
-#define goto_if_error(rc_return, msg, label)  \
-    if (rc_return != TSS2_RC_SUCCESS)         \
-    {                                         \
-        printf("%s, 0x%X\n", msg, rc_return); \
-        goto label;                           \
-    }
-
 // Test an operation using an encrypted session
 int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
 {
@@ -805,7 +841,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
         &symmetric,
         TPM2_ALG_SHA1,
         &session_enc);
-    goto_if_error(
+    goto_if_tss_error(
         rc_return, "Error: During initialization of session_enc", error);
 
     /* Set both ENC and DEC flags for the enc session */
@@ -815,7 +851,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
 
     rc_return = Esys_TRSess_SetAttributes(
         g_esys_context, session_enc, session_attributes, 0xFF);
-    goto_if_error(rc_return, "Error: During SetAttributes", error);
+    goto_if_tss_error(rc_return, "Error: During SetAttributes", error);
 
     TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
     if (seal_key_size && seal_key)
@@ -856,7 +892,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
         &auth,
         &public_info,
         &nv_handle);
-    goto_if_error(rc_return, "Error esys define nv space", error);
+    goto_if_tss_error(rc_return, "Error esys define nv space", error);
 
     rc_return = Esys_NV_Increment(
         g_esys_context,
@@ -865,7 +901,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
         session_enc,
         ESYS_TR_NONE,
         ESYS_TR_NONE);
-    goto_if_error(rc_return, "Error esys nv write", error);
+    goto_if_tss_error(rc_return, "Error esys nv write", error);
 
     TPM2B_MAX_NV_BUFFER* data;
 
@@ -880,7 +916,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
         8,
         0,
         &data);
-    goto_if_error(rc_return, "Error: nv read", error);
+    goto_if_tss_error(rc_return, "Error: nv read", error);
 
     printf("\nSecured index data:\n");
     printf("\tSize=%u BYTES\n", data->size);
@@ -934,277 +970,362 @@ error:
 
 int tpm_policy_protected_session(uint8_t* seal_key, size_t seal_key_size)
 {
-    int return_value = 0;
-#if 0
-    TSS2_RC rc_return;
-    ESYS_TR nv_handle = ESYS_TR_NONE;
-    ESYS_TR session_enc = ESYS_TR_NONE;
-    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
-                              .keyBits = {.aes = 128},
-                              .mode = {.aes = TPM2_ALG_CFB}};
+    TSS2_RC r;
+    ESYS_TR primaryHandle = ESYS_TR_NONE;
+    ESYS_TR policySession = ESYS_TR_NONE;
+    TPM2B_DIGEST* policyDigestTrial = NULL;
+    TPM2B_PUBLIC* outPublic = NULL;
+    TPM2B_CREATION_DATA* creationData = NULL;
+    TPM2B_DIGEST* creationHash = NULL;
+    TPMT_TK_CREATION* creationTicket = NULL;
+    TPM2B_PUBLIC* outPublic2 = NULL;
+    TPM2B_PRIVATE* outPrivate2 = NULL;
+    TPM2B_CREATION_DATA* creationData2 = NULL;
+    TPM2B_DIGEST* creationHash2 = NULL;
+    TPMT_TK_CREATION* creationTicket2 = NULL;
 
-    // Note! This is really bad! The nonce should be random to ensure
-    // freshness of hte session
-    TPM2B_NONCE nonce_caller = {
-        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
-                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
+    /*
+     * Firth the policy value for changing the auth value of an NV index has to
+     * be determined with a policy trial session.
+     */
+    ESYS_TR sessionTrial = ESYS_TR_NONE;
+    TPMT_SYM_DEF symmetricTrial = {.algorithm = TPM2_ALG_AES,
+                                   .keyBits = {.aes = 128},
+                                   .mode = {.aes = TPM2_ALG_CFB}};
+    TPM2B_NONCE nonceCallerTrial = {
+        .size = 20, .buffer = {11, 12, 13, 14, 15, 16, 17, 18, 19, 11,
+                               21, 22, 23, 24, 25, 26, 27, 28, 29, 30}};
 
-    /* Enc param session */
-    rc_return = Esys_StartAuthSession(
+    r = Esys_StartAuthSession(
         g_esys_context,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
-        &nonce_caller,
-        TPM2_SE_HMAC,
-        &symmetric,
+        &nonceCallerTrial,
+        TPM2_SE_TRIAL,
+        &symmetricTrial,
         TPM2_ALG_SHA1,
-        &session_enc);
-    goto_if_error(
-        rc_return, "Error: During initialization of session_enc", error);
+        &sessionTrial);
+    goto_if_tss_error(
+        r, "Error: During initialization of policy trial session", error);
 
-    /* Set both ENC and DEC flags for the enc session */
-    TPMA_SESSION session_attributes = TPMA_SESSION_DECRYPT |
-                                      TPMA_SESSION_ENCRYPT |
-                                      TPMA_SESSION_CONTINUESESSION;
+    r = Esys_PolicyPassword(
+        g_esys_context, sessionTrial, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE);
+    goto_if_tss_error(r, "Error: PolicyPassword", error);
 
-    rc_return = Esys_TRSess_SetAttributes(
-        g_esys_context, session_enc, session_attributes, 0xFF);
-    goto_if_error(rc_return, "Error: During SetAttributes", error);
-
-    rc_return = Esys_PolicyPassword(
+    r = Esys_PolicyGetDigest(
         g_esys_context,
-        session_enc,
+        sessionTrial,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
-        ESYS_TR_NONE
-        );
-    goto_if_error(rc_return, "Error: During Esys_PolicyPassword", error);
+        ESYS_TR_NONE,
+        &policyDigestTrial);
+    goto_if_tss_error(r, "Error: PolicyGetDigest", error);
 
-
-    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
-    if (seal_key_size && seal_key)
-    {
-        if (seal_key_size > 64)
-        {
-            printf("Error: seal key is too long!\n");
-            return_value = -1;
-            goto error;
-        }
-        auth.size = seal_key_size;
-        memcpy(auth.buffer, seal_key, seal_key_size);
-        printf("Seal key has been set\n");
-    }
-
-    TPM2B_NV_PUBLIC public_info = {
+    TPM2B_PUBLIC inPublic = {
         .size = 0,
-        .nvPublic = {
-            .nvIndex = TPM_COUNTER_ID,
+        .publicArea =
+            {
+                .type = TPM2_ALG_RSA,
+                .nameAlg = TPM2_ALG_SHA1,
+                .objectAttributes =
+                    (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED |
+                     TPMA_OBJECT_DECRYPT | TPMA_OBJECT_FIXEDTPM |
+                     TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN),
+                .authPolicy = *policyDigestTrial,
+                .parameters.rsaDetail =
+                    {
+                        .symmetric = {.algorithm = TPM2_ALG_AES,
+                                      .keyBits.aes = 128,
+                                      .mode.aes = TPM2_ALG_CFB},
+                        .scheme = {.scheme = TPM2_ALG_NULL},
+                        .keyBits = 2048,
+                        .exponent = 0,
+                    },
+                .unique.rsa =
+                    {
+                        .size = 0,
+                        .buffer = {},
+                    },
+            },
+    };
+
+    TPM2B_AUTH authValuePrimary = {.size = 5, .buffer = {1, 2, 3, 4, 5}};
+
+    TPM2B_SENSITIVE_CREATE inSensitivePrimary = {
+        .size = 0,
+        .sensitive =
+            {
+                .userAuth =
+                    {
+                        .size = 0,
+                        .buffer = {0},
+                    },
+                .data =
+                    {
+                        .size = 0,
+                        .buffer = {0},
+                    },
+            },
+    };
+
+    inSensitivePrimary.sensitive.userAuth = authValuePrimary;
+
+    TPM2B_DATA outsideInfo = {
+        .size = 0,
+        .buffer = {},
+    };
+
+    TPML_PCR_SELECTION creationPCR = {
+        .count = 0,
+    };
+
+    TPM2B_AUTH authValue = {.size = 0, .buffer = {}};
+
+    r = Esys_TR_SetAuth(g_esys_context, ESYS_TR_RH_OWNER, &authValue);
+    goto_if_tss_error(r, "Error: TR_SetAuth", error);
+
+    r = Esys_CreatePrimary(
+        g_esys_context,
+        ESYS_TR_RH_OWNER,
+        ESYS_TR_PASSWORD,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &inSensitivePrimary,
+        &inPublic,
+        &outsideInfo,
+        &creationPCR,
+        &primaryHandle,
+        &outPublic,
+        &creationData,
+        &creationHash,
+        &creationTicket);
+    goto_if_tss_error(r, "Error esys create primary", error);
+
+    TPMT_SYM_DEF policySymmetric = {.algorithm = TPM2_ALG_AES,
+                                    .keyBits = {.aes = 128},
+                                    .mode = {.aes = TPM2_ALG_CFB}};
+    TPM2B_NONCE policyNonceCaller = {
+        .size = 20, .buffer = {11, 12, 13, 14, 15, 16, 17, 18, 19, 11,
+                               21, 22, 23, 24, 25, 26, 27, 28, 29, 30}};
+    r = Esys_StartAuthSession(
+        g_esys_context,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &policyNonceCaller,
+        TPM2_SE_POLICY,
+        &policySymmetric,
+        TPM2_ALG_SHA1,
+        &policySession);
+    goto_if_tss_error(
+        r, "Error: During initialization of policy trial session", error);
+
+    r = Esys_PolicyPassword(
+        g_esys_context,
+        policySession,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE);
+    goto_if_tss_error(r, "Error: PolicyAuthValue", error);
+
+    r = Esys_TR_SetAuth(g_esys_context, primaryHandle, &authValuePrimary);
+    goto_if_tss_error(r, "Error: TR_SetAuth", error);
+
+    TPM2B_AUTH authKey2 = {.size = 6, .buffer = {6, 7, 8, 9, 10, 11}};
+
+    TPM2B_SENSITIVE_CREATE inSensitive2 = {
+        .size = 0,
+        .sensitive = {.userAuth = authKey2, .data = {.size = 0, .buffer = {}}}};
+
+    TPM2B_PUBLIC inPublic2 = {
+        .size = 0,
+        .publicArea = {
+            .type = TPM2_ALG_RSA,
             .nameAlg = TPM2_ALG_SHA1,
-            .attributes =
-                (TPMA_NV_OWNERWRITE | TPMA_NV_AUTHWRITE | TPMA_NV_OWNERREAD |
-                 TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
+            .objectAttributes =
+                (TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_RESTRICTED |
+                 TPMA_OBJECT_DECRYPT | TPMA_OBJECT_FIXEDTPM |
+                 TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN),
+
             .authPolicy =
                 {
                     .size = 0,
-                    .buffer = {},
                 },
-            .dataSize = 8,
-        }};
+            .parameters.rsaDetail = {.symmetric = {.algorithm = TPM2_ALG_AES,
+                                                   .keyBits.aes = 128,
+                                                   .mode.aes = TPM2_ALG_CFB},
+                                     .scheme =
+                                         {
+                                             .scheme = TPM2_ALG_NULL,
+                                         },
+                                     .keyBits = 2048,
+                                     .exponent = 0},
+            .unique.rsa = {
+                .size = 0,
+                .buffer = {},
+            }}};
 
-    rc_return = Esys_NV_DefineSpace(
+    TPM2B_DATA outsideInfo2 = {
+        .size = 0,
+        .buffer = {},
+    };
+
+    TPML_PCR_SELECTION creationPCR2 = {
+        .count = 0,
+    };
+
+    r = Esys_Create(
         g_esys_context,
-        ESYS_TR_RH_OWNER,
-        session_enc,
+        primaryHandle,
+        policySession,
         ESYS_TR_NONE,
         ESYS_TR_NONE,
-        &auth,
-        &public_info,
-        &nv_handle);
-    goto_if_error(rc_return, "Error esys define nv space", error);
+        &inSensitive2,
+        &inPublic2,
+        &outsideInfo2,
+        &creationPCR2,
+        &outPrivate2,
+        &outPublic2,
+        &creationData2,
+        &creationHash2,
+        &creationTicket2);
+    goto_if_tss_error(r, "Error esys create ", error);
 
-    rc_return = Esys_NV_Increment(
-        g_esys_context,
-        nv_handle,
-        nv_handle,
-        session_enc,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE);
-    goto_if_error(rc_return, "Error esys nv write", error);
+    r = Esys_FlushContext(g_esys_context, primaryHandle);
+    goto_if_tss_error(r, "Error: FlushContext", error);
 
-    TPM2B_MAX_NV_BUFFER* data;
+    r = Esys_FlushContext(g_esys_context, sessionTrial);
+    goto_if_tss_error(r, "Flushing context", error);
 
-    // Read encrypted
-    rc_return = Esys_NV_Read(
-        g_esys_context,
-        nv_handle,
-        nv_handle,
-        session_enc,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE,
-        8,
-        0,
-        &data);
-    goto_if_error(rc_return, "Error: nv read", error);
+    r = Esys_FlushContext(g_esys_context, policySession);
+    goto_if_tss_error(r, "Flushing context", error);
 
-    printf("\nSecured index data:\n");
-    printf("\tSize=%u BYTES\n", data->size);
-    printf("\tData=<");
-    for (int i = 0; i != data->size; i++)
+    if (policyDigestTrial)
     {
-        printf("%02x", data->buffer[i]);
+        Esys_Free(policyDigestTrial);
     }
-    printf(">\n");
+    if (outPublic)
+    {
+        Esys_Free(outPublic);
+    }
+    if (creationData)
+    {
+        Esys_Free(creationData);
+    }
+    if (creationHash)
+    {
+        Esys_Free(creationHash);
+    }
+    if (creationTicket)
+    {
+        Esys_Free(creationTicket);
+    }
 
-    Esys_Free(data);
+    if (outPublic2)
+    {
+        Esys_Free(outPublic2);
+    }
+    if (outPrivate2)
+    {
+        Esys_Free(outPrivate2);
+    }
+    if (creationData2)
+    {
+        Esys_Free(creationData2);
+    }
+    if (creationHash2)
+    {
+        Esys_Free(creationHash2);
+    }
+    if (creationTicket2)
+    {
+        Esys_Free(creationTicket2);
+    }
 
-    // List the indexes. Ours will be there
-    printf("\nIndex enumeration:\n");
-    tpm_list_nv_indexes();
-
-    // Read the counter unencrypted. This works and the host will be
-    // able to see what we are reading.
-    // As there is no policy on the counter we are able to read it too.
-    printf("\nRead NV counter\n");
-    tpm_read_nv_counter();
+    return EXIT_SUCCESS;
 
 error:
-    if (rc_return)
-        return_value = -1;
 
-    if (nv_handle != ESYS_TR_NONE)
+    if (policySession != ESYS_TR_NONE)
     {
-        if (Esys_NV_UndefineSpace(
-                g_esys_context,
-                ESYS_TR_RH_OWNER,
-                nv_handle,
-                session_enc,
-                ESYS_TR_NONE,
-                ESYS_TR_NONE) != TSS2_RC_SUCCESS)
+        if (Esys_FlushContext(g_esys_context, policySession) != TSS2_RC_SUCCESS)
         {
-            printf("Cleanup nv_handle failed.");
+            printf("Cleanup policySession failed.");
         }
     }
 
-    if (session_enc != ESYS_TR_NONE)
+    if (primaryHandle != ESYS_TR_NONE)
     {
-        if (Esys_FlushContext(g_esys_context, session_enc) != TSS2_RC_SUCCESS)
+        if (Esys_FlushContext(g_esys_context, primaryHandle) != TSS2_RC_SUCCESS)
         {
-            printf("Cleanup session_enc failed.");
+            printf("Cleanup primaryHandle failed.");
         }
     }
-#endif
-    return return_value;
+
+    return EXIT_FAILURE;
 }
+
 // Pass in the seal key used for the encryption tests.
 // Within enclave this should be the enclave sealing key.
 // In the host this will be, well, something else!
-int run_tpm_tests(uint8_t* seal_key, size_t seal_key_size)
+int run_tpm_tests(
+    bool running_in_enclave,
+    uint8_t* seal_key,
+    size_t seal_key_size)
 {
-    int return_value;
-    int master_return_value = 0;
+    int return_value = 0;
 
     printf("\nStarting tpm_tests...\n");
 
-    printf("\nRunning tpm_initialize...\n");
-    return_value = tpm_initialize();
-    if (return_value == 0)
-    {
-        printf("\nRunning get_capabilities...\n");
-        return_value = tpm_get_capabilities();
-        if (return_value != 0)
-        {
-            master_return_value = return_value;
-        }
+    run_test(running_in_enclave, tpm_initialize, error_no_deinitialize);
 
-        printf("\nRunning get_time...\n");
-        return_value = tpm_get_time();
-        if (return_value != 0)
-        {
-            master_return_value = return_value;
-        }
+    run_test(running_in_enclave, tpm_get_capabilities, error);
 
-        printf("\nRunning list_nv_indexes...\n");
-        return_value = tpm_list_nv_indexes();
-        if (return_value != 0)
-        {
-            master_return_value = return_value;
-        }
+    run_test(running_in_enclave, tpm_get_time, error);
 
-        printf("\nRunning allocate_nv_counter...\n");
-        return_value = tpm_allocate_nv_counter();
-        if (return_value == 0)
-        {
-            printf("\nRunning list_nv_indexes...\n");
-            return_value = tpm_list_nv_indexes();
-            if (return_value != 0)
-            {
-                master_return_value = return_value;
-            }
+    run_test(running_in_enclave, tpm_list_nv_indexes, error);
 
-            printf("\nRunning increment_nv_counter...\n");
-            return_value = tpm_increment_nv_counter();
-            if (return_value != 0)
-            {
-                master_return_value = return_value;
-            }
+    run_test(running_in_enclave, tpm_allocate_nv_counter, error);
 
-            printf("\nRunning read_nv_counter...\n");
-            return_value = tpm_read_nv_counter();
-            if (return_value != 0)
-            {
-                master_return_value = return_value;
-            }
+    run_test(running_in_enclave, tpm_list_nv_indexes, error_delete_counter);
 
-            printf("\nRunning delete_nv_counter...\n");
-            return_value = tpm_delete_nv_counter();
-            if (return_value != 0)
-            {
-                master_return_value = return_value;
-            }
+    run_test(
+        running_in_enclave, tpm_increment_nv_counter, error_delete_counter);
 
-            printf("\nRunning list_nv_indexes...\n");
-            return_value = tpm_list_nv_indexes();
-            if (return_value != 0)
-            {
-                master_return_value = return_value;
-            }
-        }
-        else
-        {
-            printf(
-                "\nSkipping rest of NV tests due to NV allocation failure\n");
-            master_return_value = return_value;
-        }
+    run_test(running_in_enclave, tpm_read_nv_counter, error_delete_counter);
 
-        printf("\nRunning encrypted session test...\n");
-        return_value = tpm_encrypted_session(seal_key, seal_key_size);
-        if (return_value != 0)
-        {
-            master_return_value = return_value;
-        }
+    run_test(running_in_enclave, tpm_delete_nv_counter, error);
 
-        printf("\nRunning policy based session test...\n");
-        return_value = tpm_policy_protected_session(seal_key, seal_key_size);
-        if (return_value != 0)
-        {
-            master_return_value = return_value;
-        }
+    run_test(running_in_enclave, tpm_list_nv_indexes, error);
 
-        printf("\nRunning tpm_deinitialize...\n");
-        return_value = tpm_deinitialize();
-        if (return_value != 0)
-        {
-            master_return_value = return_value;
-        }
-    }
-    else
-    {
-        master_return_value = return_value;
-    }
+    run_test_with_seal_key(
+        running_in_enclave,
+        tpm_encrypted_session,
+        seal_key,
+        seal_key_size,
+        error);
+
+    run_test_with_seal_key(
+        running_in_enclave,
+        tpm_policy_protected_session,
+        seal_key,
+        seal_key_size,
+        error);
+
+error:
+    run_test(running_in_enclave, tpm_deinitialize, error);
+
+error_no_deinitialize:
     printf("\nFinished tpm_tests...\n");
 
-    return master_return_value;
+    return return_value;
+
+error_delete_counter:
+    run_test(running_in_enclave, tpm_delete_nv_counter, error);
+    goto error;
 }

@@ -6,6 +6,11 @@
 #include "../tpm/tpm.h"
 #include "tpm_u.h"
 
+#define CONSOLE_ESCAPE "\033"
+#define CONSOLE_RED CONSOLE_ESCAPE "[0;31m"
+#define CONSOLE_GREEN CONSOLE_ESCAPE "[0;32m"
+#define CONSOLE_RESET CONSOLE_ESCAPE "[0m"
+
 bool check_simulate_opt(int* argc, const char* argv[])
 {
     for (int i = 0; i < *argc; i++)
@@ -25,6 +30,8 @@ int main(int argc, const char* argv[])
 {
     oe_result_t result;
     oe_enclave_t* enclave = NULL;
+    int host_tests_result = 1;
+    int enclave_tests_result = 1;
 
     uint32_t flags = OE_ENCLAVE_FLAG_DEBUG;
     if (check_simulate_opt(&argc, argv))
@@ -44,11 +51,7 @@ int main(int argc, const char* argv[])
     printf("Running tests in host....\n");
     uint8_t insecure_seal_key[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
                                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
-    int ret = run_tpm_tests(NULL, sizeof(insecure_seal_key));
-    if (ret != 0)
-    {
-        fprintf(stderr, "Tests failed to run in host %d\n", ret);
-    }
+    host_tests_result = run_tpm_tests(false, NULL, sizeof(insecure_seal_key));
 
     if (argc == 2)
     {
@@ -72,7 +75,7 @@ int main(int argc, const char* argv[])
         printf("Calling into enclave...\n");
 
         // run the tpm tests in the enclave
-        result = enclave_tpm_tests(enclave, &ret);
+        result = enclave_tpm_tests(enclave, &enclave_tests_result);
         if (result != OE_OK)
         {
             fprintf(
@@ -82,17 +85,12 @@ int main(int argc, const char* argv[])
                 oe_result_str(result));
             goto exit;
         }
-        else if (ret != 0)
-        {
-            fprintf(stderr, "enclave_tpm_tests returned error, %i", ret);
-        }
     }
     else
     {
         printf("\nSkipping enclave tests. Add enclave library path to command "
                "line to enable\n");
     }
-    ret = 0;
 
 exit:
     // Clean up the enclave if we created one
@@ -102,7 +100,29 @@ exit:
         oe_terminate_enclave(enclave);
     }
 
-    printf("\nDone!\n");
+    printf("\n\n************************\n");
+    printf("************************\n");
+    printf(
+        "** host tests:    %s\n",
+        host_tests_result == 1
+            ? "skipped"
+            : host_tests_result == 0 ? CONSOLE_GREEN "passed" CONSOLE_RESET
+                                     : CONSOLE_RED "failed" CONSOLE_RESET);
+    printf(
+        "** enclave tests: %s\n",
+        enclave_tests_result == 1
+            ? "skipped"
+            : enclave_tests_result == 0 ? CONSOLE_GREEN "passed" CONSOLE_RESET
+                                        : CONSOLE_RED "failed" CONSOLE_RESET);
+    printf("************************\n");
+    printf("************************\n\n");
 
-    return ret;
+    if (host_tests_result == 0 && enclave_tests_result == 0)
+    {
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
 }
