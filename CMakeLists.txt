@@ -5,6 +5,17 @@ cmake_minimum_required(VERSION 3.10)
 
 project("TPM Sample" LANGUAGES C)
 
+# Collect Git info
+if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
+  # Install Git pre-commit hook
+  if (NOT WIN32)
+    file(
+      COPY scripts/pre-commit
+      DESTINATION "${PROJECT_SOURCE_DIR}/.git/hooks")
+  endif ()
+endif ()
+
+
 find_package(OpenEnclave CONFIG REQUIRED)
 
 set(CMAKE_CXX_STANDARD 11)
