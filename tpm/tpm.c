@@ -8,12 +8,17 @@
 #include <tss2_esys.h>
 #include <tss2_rc.h>
 
+#define CONSOLE_ESCAPE "\033"
+#define CONSOLE_RED CONSOLE_ESCAPE "[0;31m"
+#define CONSOLE_GREEN CONSOLE_ESCAPE "[0;32m"
+#define CONSOLE_RESET CONSOLE_ESCAPE "[0m"
+
 #define test_starting(running_in_enclave, test)                                \
     {                                                                          \
         printf("\n***********************************************************" \
                "***************\n");                                           \
         printf(                                                                \
-            "** Running[%s]: %s\n",                                            \
+            "** [%s]: Running: %s\n",                                          \
             running_in_enclave ? "enclave" : "host",                           \
             test);                                                             \
     }
@@ -22,7 +27,7 @@
     if (_return_code != 0)                                                     \
     {                                                                          \
         printf(                                                                \
-            "** Failed[%s]: %s\n",                                             \
+            "** " CONSOLE_RED "[%s]: Failed: %s\n" CONSOLE_RESET,              \
             running_in_enclave ? "enclave" : "host",                           \
             test);                                                             \
         printf("*************************************************************" \
@@ -33,7 +38,7 @@
     else                                                                       \
     {                                                                          \
         printf(                                                                \
-            "** Passed[%s]: %s\n",                                             \
+            "** " CONSOLE_GREEN "[%s]: Passed: %s\n" CONSOLE_RESET,            \
             running_in_enclave ? "enclave" : "host",                           \
             test);                                                             \
         printf("*************************************************************" \

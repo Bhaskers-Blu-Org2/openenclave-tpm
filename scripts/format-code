@@ -92,7 +92,7 @@ OPTIONS:
     -w, --whatif            Run the script without actually modifying the files
                             and display the diff of expected changes, if any.
     --exclude-dirs          Subdirectories to exclude. If unspecified, then
-                            ./3rdparty, ./build and ./prereqs are excluded.
+                            ./tpm2-tss/tpm2-tss and ./build are excluded.
                             All subdirectories are relative to the current path.
     --include-exts          File extensions to include for formatting. If
                             unspecified, then *.h, *.c and *.cpp are included.
@@ -109,7 +109,7 @@ modified by format-code, you can run from the root folder:
 To update only all .c and .cpp files in tests/ except for tests/echo/host, you
 can run from the tests folder:
 
-    tests$ ../scripts/format-code --exclude-dirs="echo/host" \
+    tests$ ../scripts/format-code --exclude-dirs="./echo/host" \
       --include-exts="c cpp"
 
 To run only against a specified set of comma separated files in the current directory:
@@ -186,7 +186,7 @@ findargs='find .'
 
 get_find_args()
 {
-    local defaultExcludeDirs='./.git ./3rdparty ./prereqs ./build *.cquery_cached_index'
+    local defaultExcludeDirs='./.git ./tpm2-tss/tpm2-tss ./build *.cquery_cached_index'
     local defaultIncludeExts='h c cpp'
 
     if [[ -z ${userExcludeDirs} ]]; then
