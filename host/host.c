@@ -51,7 +51,8 @@ int main(int argc, const char* argv[])
     printf("Running tests in host....\n");
     uint8_t insecure_seal_key[] = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
                                    11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
-    host_tests_result = run_tpm_tests(false, NULL, sizeof(insecure_seal_key));
+    host_tests_result =
+        run_tpm_tests(false, insecure_seal_key, sizeof(insecure_seal_key));
 
     if (argc == 2)
     {
