@@ -5,17 +5,21 @@ add_custom_command(OUTPUT tpm_t.h tpm_t.c tpm_args.h
   DEPENDS ${CMAKE_SOURCE_DIR}/tpm.edl
   COMMAND openenclave::oeedger8r --trusted ${CMAKE_SOURCE_DIR}/tpm.edl)
 
-add_executable(tpm_enclave enc.c ${CMAKE_CURRENT_BINARY_DIR}/tpm_t.c)
+add_executable(tpm_enclave enc.c tcti-tbs-ocalls.c ${CMAKE_CURRENT_BINARY_DIR}/tpm_t.c )
 
 target_link_directories(tpm_enclave PRIVATE /opt/oe-openssl/lib ${CMAKE_CURRENT_BINARY_DIR}/../tpm2-tss )
-target_link_libraries(tpm_enclave 
-  openenclave::oeenclave openenclave::oelibc openenclave::oehostepoll  openenclave::oehostfs 
-  tpm_common 
-  libtss2-esys.a  libtss2-mu.a  libtss2-rc.a  libtss2-sys.a  libtss2-tcti-device.a  libtss2-tctildr.a  libutil.a 
+target_link_libraries(tpm_enclave
+  openenclave::oeenclave openenclave::oelibc openenclave::oehostepoll  openenclave::oehostfs
+  tpm_common
+  libtss2-esys.a  libtss2-mu.a  libtss2-rc.a  libtss2-sys.a  libtss2-tcti-device.a  libtss2-tctildr.a  libutil.a
   liboeopensslcrypto.a)
 
 target_include_directories(tpm_enclave PRIVATE
+  ${CMAKE_SOURCE_DIR}/tpm
   ${CMAKE_CURRENT_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/tpm2-tss/tpm2-tss/src/tss2-tcti
+  ${CMAKE_SOURCE_DIR}/tpm2-tss/tpm2-tss/src/
+  ${CMAKE_CURRENT_BINARY_DIR}/../tpm2-tss/tpm2-tss
   ${CMAKE_SOURCE_DIR}/tpm2-tss/tpm2-tss/include/tss2)
 
 # Generate key for signing enclave

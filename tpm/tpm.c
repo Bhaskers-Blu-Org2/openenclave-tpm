@@ -418,14 +418,30 @@ error:
     return return_value;
 }
 
-int _delete_nv_counter(ESYS_CONTEXT* esys_context, uint32_t index_handle)
+int _delete_nv_counter(
+    ESYS_CONTEXT* esys_context,
+    TPM2B_AUTH* auth,
+    uint32_t index_handle)
 {
     int return_value = -1;
     TSS2_RC rc_return;
     ESYS_TR nv_index;
-    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
-    ESYS_TR session_handle = ESYS_TR_PASSWORD;
+    ESYS_TR session_handle = ESYS_TR_NONE;
     TPMS_CAPABILITY_DATA* capabilityData = NULL;
+    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
+                              .keyBits = {.aes = 128},
+                              .mode = {.aes = TPM2_ALG_CFB}};
+
+    TPMA_SESSION session_attributes = 0;
+    // TPMA_SESSION_DECRYPT |
+    // TPMA_SESSION_ENCRYPT |
+    // TPMA_SESSION_CONTINUESESSION;
+
+    // Note! This is really bad! The nonce should be random to ensure
+    // freshness of the session
+    TPM2B_NONCE nonce_caller = {
+        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
 
     printf("_delete_nv_counter(index=0x%X)\n", index_handle);
 
@@ -459,6 +475,27 @@ int _delete_nv_counter(ESYS_CONTEXT* esys_context, uint32_t index_handle)
         goto not_present;
     }
 
+    rc_return = Esys_StartAuthSession(
+        esys_context,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &nonce_caller,
+        TPM2_SE_HMAC,
+        &symmetric,
+        TPM2_ALG_SHA256,
+        &session_handle);
+    goto_if_tss_error(rc_return, "Esys_StartAuthSession failed", error);
+
+    // rc_return = Esys_TRSess_SetAttributes(esys_context, session_handle,
+    // session_attributes, 0xff); goto_if_tss_error(
+    //    rc_return, "Esys_TRSess_SetAttributes failed", error);
+
+    rc_return = Esys_TR_SetAuth(esys_context, session_handle, auth);
+    goto_if_tss_error(rc_return, "Esys_TR_SetAuth failed", error);
+
     rc_return = Esys_TR_FromTPMPublic(
         esys_context,
         index_handle,
@@ -466,12 +503,15 @@ int _delete_nv_counter(ESYS_CONTEXT* esys_context, uint32_t index_handle)
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         &nv_index);
+
     goto_if_tss_error(
-        rc_return, "Esys_TR_FromTPMPublic. counter not present?", error);
+        rc_return,
+        "Esys_TR_FromTPMPublic, Unable to get index. Not present",
+        error);
 
     rc_return = Esys_NV_UndefineSpace(
         esys_context,
-        auth_handle,
+        ESYS_TR_RH_OWNER, /* auth_handle TODO: Why not nv_index?! */
         nv_index,
         session_handle,
         ESYS_TR_NONE,
@@ -487,6 +527,11 @@ error:
     {
         Esys_Free(capabilityData);
     }
+    if (session_handle != ESYS_TR_NONE)
+    {
+        rc_return = Esys_FlushContext(esys_context, session_handle);
+        log_tss_error(rc_return, "Esys_FlushContext failed");
+    }
 
     return return_value;
 }
@@ -494,6 +539,7 @@ error:
 int tpm_delete_nv_counter()
 {
     int return_value = 0;
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
     ESYS_CONTEXT* esys_context = NULL;
 
     if (_initialize_esys_ctx(&esys_context) != 0)
@@ -501,7 +547,7 @@ int tpm_delete_nv_counter()
         goto error;
     }
 
-    return_value = _delete_nv_counter(esys_context, TPM_COUNTER_ID);
+    return_value = _delete_nv_counter(esys_context, &auth, TPM_COUNTER_ID);
 
 error:
     _deinitialize_esys_ctx(esys_context);
@@ -516,10 +562,34 @@ int _alloc_nv_counter(
     int return_value = -1;
     TSS2_RC rc_return;
     ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
-    ESYS_TR session_handle = ESYS_TR_PASSWORD;
+    ESYS_TR session_handle = ESYS_TR_NONE;
     ESYS_TR nv_result_handle;
     TPM2B_NV_PUBLIC public_info = {.size = 0};
     TPM2B_AUTH nv_auth = *auth;
+    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
+                              .keyBits = {.aes = 128},
+                              .mode = {.aes = TPM2_ALG_CFB}};
+
+    // Note! This is really bad! The nonce should be random to ensure
+    // freshness of hte session
+    TPM2B_NONCE nonce_caller = {
+        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
+
+    rc_return = Esys_StartAuthSession(
+        esys_context,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &nonce_caller,
+        TPM2_SE_HMAC,
+        &symmetric,
+        TPM2_ALG_SHA256,
+        &session_handle);
+    goto_if_tss_error(
+        rc_return, "Error: During initialization of session_enc", error);
 
     public_info.size = sizeof(TPMI_RH_NV_INDEX) + sizeof(TPMI_ALG_HASH) +
                        sizeof(TPMA_NV) + sizeof(UINT16) + sizeof(UINT16);
@@ -535,8 +605,8 @@ int _alloc_nv_counter(
 
     // Now set the attributes.
     public_info.nvPublic.attributes =
-        (TPMA_NV_OWNERWRITE | TPMA_NV_AUTHWRITE | TPMA_NV_OWNERREAD |
-         TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT);
+        (TPMA_NV_AUTHWRITE | TPMA_NV_AUTHREAD |
+         TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT);
 
     rc_return = Esys_NV_DefineSpace(
         esys_context,
@@ -554,6 +624,11 @@ int _alloc_nv_counter(
     return_value = 0;
 
 error:
+    if (session_handle != ESYS_TR_NONE)
+    {
+        rc_return = Esys_FlushContext(esys_context, session_handle);
+        log_tss_error(rc_return, "Esys_FlushContext failed");
+    }
     return return_value;
 }
 
@@ -563,7 +638,7 @@ error:
 // potentially tamper with the data that we receive.
 int tpm_allocate_nv_counter()
 {
-    TPM2B_AUTH auth = {.size = 0};
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
     int return_code = -1;
     ESYS_CONTEXT* esys_context = NULL;
 
@@ -573,7 +648,11 @@ int tpm_allocate_nv_counter()
     }
 
     // make sure counter is deleted before we start!
-    _delete_nv_counter(esys_context, TPM_COUNTER_ID);
+    if (_delete_nv_counter(esys_context, &auth, TPM_COUNTER_ID) != 0)
+    {
+        printf(FAILMSG("Failed to delete counter\n"));
+        goto error;
+    }
 
     return_code = _alloc_nv_counter(esys_context, &auth, TPM_COUNTER_ID);
 
@@ -587,13 +666,51 @@ error:
 // not other NV defined allocations.
 // This is not using an encrypted session so the host can see and
 // potentially tamper with the data that we receive.
-int _increment_nv_counter(ESYS_CONTEXT* esys_context, uint32_t index_handle)
+int _increment_nv_counter(
+    ESYS_CONTEXT* esys_context,
+    TPM2B_AUTH* auth,
+    uint32_t index_handle)
 {
     int return_value = -1;
     TSS2_RC rc_return;
     ESYS_TR nv_index;
-    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
-    ESYS_TR session_handle = ESYS_TR_PASSWORD;
+    ESYS_TR session_handle = ESYS_TR_NONE;
+
+    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
+                              .keyBits = {.aes = 128},
+                              .mode = {.aes = TPM2_ALG_CFB}};
+
+    // Note! This is really bad! The nonce should be random to ensure
+    // freshness of the session
+    TPM2B_NONCE nonce_caller = {
+        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
+
+    rc_return = Esys_StartAuthSession(
+        esys_context,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &nonce_caller,
+        TPM2_SE_HMAC,
+        &symmetric,
+        TPM2_ALG_SHA256,
+        &session_handle);
+    goto_if_tss_error(rc_return, "Esys_StartAuthSession failed", error);
+
+    TPMA_SESSION session_attributes = 0;
+    // TPMA_SESSION_DECRYPT |
+    // TPMA_SESSION_ENCRYPT |
+    // TPMA_SESSION_CONTINUESESSION;
+
+    // rc_return = Esys_TRSess_SetAttributes(esys_context, session_handle,
+    // session_attributes, 0xff); goto_if_tss_error(
+    //    rc_return, "Esys_TRSess_SetAttributes failed", error);
+
+    rc_return = Esys_TR_SetAuth(esys_context, session_handle, auth);
+    goto_if_tss_error(rc_return, "Esys_TR_SetAuth failed", error);
 
     rc_return = Esys_TR_FromTPMPublic(
         esys_context,
@@ -610,11 +727,11 @@ int _increment_nv_counter(ESYS_CONTEXT* esys_context, uint32_t index_handle)
 
     rc_return = Esys_NV_Increment(
         esys_context,
-        auth_handle,
-        nv_index,
-        session_handle,
-        ESYS_TR_NONE,
-        ESYS_TR_NONE);
+        nv_index,       /* auth_handle */
+        nv_index,       /* nv_index */
+        session_handle, /* session_handle 1*/
+        ESYS_TR_NONE,   /* session_handle 2 */
+        ESYS_TR_NONE);  /* session_handle 3 */
 
     goto_if_tss_error(
         rc_return,
@@ -624,6 +741,11 @@ int _increment_nv_counter(ESYS_CONTEXT* esys_context, uint32_t index_handle)
     return_value = 0;
 
 error:
+    if (session_handle != ESYS_TR_NONE)
+    {
+        rc_return = Esys_FlushContext(esys_context, session_handle);
+        log_tss_error(rc_return, "Esys_FlushContext failed");
+    }
     return return_value;
 }
 
@@ -631,13 +753,14 @@ int tpm_increment_nv_counter()
 {
     int return_value = -1;
     ESYS_CONTEXT* esys_context = NULL;
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
 
     if (_initialize_esys_ctx(&esys_context) != 0)
     {
         goto error;
     }
 
-    return_value = _increment_nv_counter(esys_context, TPM_COUNTER_ID);
+    return_value = _increment_nv_counter(esys_context, &auth, TPM_COUNTER_ID);
 
 error:
     _deinitialize_esys_ctx(esys_context);
@@ -655,12 +778,43 @@ int _read_nv_counter(
     int return_value = -1;
     TSS2_RC rc_return;
     ESYS_TR tr_object = ESYS_TR_NONE;
-    ESYS_TR auth_handle = ESYS_TR_RH_OWNER;
-    ESYS_TR session_handle = ESYS_TR_PASSWORD;
+    ESYS_TR session_handle = ESYS_TR_NONE;
     TPM2B_NV_PUBLIC* nv_public = NULL;
     TPM2B_MAX_NV_BUFFER* data = NULL;
 
-    printf("_read_nv_counter(index=0x%X)\n", index);
+    TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
+                              .keyBits = {.aes = 128},
+                              .mode = {.aes = TPM2_ALG_CFB}};
+
+    // Note! This is really bad! The nonce should be random to ensure
+    // freshness of the session
+    TPM2B_NONCE nonce_caller = {
+        .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
+                               11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
+
+    rc_return = Esys_StartAuthSession(
+        esys_context,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &nonce_caller,
+        TPM2_SE_HMAC,
+        &symmetric,
+        TPM2_ALG_SHA256,
+        &session_handle);
+    goto_if_tss_error(rc_return, "Esys_StartAuthSession failed", error);
+
+    TPMA_SESSION session_attributes = TPMA_SESSION_DECRYPT |
+                                      TPMA_SESSION_ENCRYPT |
+                                      0; // TPMA_SESSION_CONTINUESESSION;
+    rc_return = Esys_TRSess_SetAttributes(
+        esys_context, session_handle, session_attributes, 0xff);
+    goto_if_tss_error(rc_return, "Esys_TRSess_SetAttributes failed", error);
+
+    rc_return = Esys_TR_SetAuth(esys_context, session_handle, auth);
+    goto_if_tss_error(rc_return, "Esys_TR_SetAuth failed", error);
 
     rc_return = Esys_TR_FromTPMPublic(
         esys_context,
@@ -669,7 +823,11 @@ int _read_nv_counter(
         ESYS_TR_NONE,
         ESYS_TR_NONE,
         &tr_object);
-    goto_if_tss_error(rc_return, "Esys_TR_FromTPMPublic", error);
+
+    goto_if_tss_error(
+        rc_return,
+        "Esys_TR_FromTPMPublic, Unable to get index. Not present",
+        error);
 
     rc_return = Esys_NV_ReadPublic(
         esys_context,
@@ -681,9 +839,12 @@ int _read_nv_counter(
         NULL);
     goto_if_tss_error(rc_return, "Esys_NV_ReadPublic", error);
 
+    rc_return = Esys_TR_SetAuth(esys_context, session_handle, auth);
+    goto_if_tss_error(rc_return, "Esys_TR_SetAuth", error);
+
     rc_return = Esys_NV_Read(
         esys_context,
-        auth_handle,
+        tr_object,
         tr_object,
         session_handle,
         ESYS_TR_NONE,
@@ -729,6 +890,11 @@ error:
     {
         rc_return = Esys_TR_Close(esys_context, &tr_object);
         log_tss_error(rc_return, "Esys_TR_Close");
+    }
+    if (session_handle != ESYS_TR_NONE)
+    {
+        rc_return = Esys_FlushContext(esys_context, session_handle);
+        log_tss_error(rc_return, "Esys_FlushContext failed");
     }
 
     return return_value;
@@ -938,12 +1104,15 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
     int return_value = -1;
     ESYS_TR nv_handle = ESYS_TR_NONE;
     ESYS_TR session_enc = ESYS_TR_NONE;
+    ESYS_TR tr_object = ESYS_TR_NONE;
+    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
+
     TPMT_SYM_DEF symmetric = {.algorithm = TPM2_ALG_AES,
                               .keyBits = {.aes = 128},
                               .mode = {.aes = TPM2_ALG_CFB}};
 
     // Note! This is really bad! The nonce should be random to ensure
-    // freshness of hte session
+    // freshness of the session
     TPM2B_NONCE nonce_caller = {
         .size = 20, .buffer = {1,  2,  3,  4,  5,  6,  7,  8,  9,  10,
                                11, 12, 13, 14, 15, 16, 17, 18, 19, 20}};
@@ -966,7 +1135,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
         &nonce_caller,
         TPM2_SE_HMAC,
         &symmetric,
-        TPM2_ALG_SHA1,
+        TPM2_ALG_SHA256,
         &session_enc);
     goto_if_tss_error(
         rc_return, "Error: During initialization of session_enc", error);
@@ -974,13 +1143,15 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
     /* Set both ENC and DEC flags for the enc session */
     TPMA_SESSION session_attributes = TPMA_SESSION_DECRYPT |
                                       TPMA_SESSION_ENCRYPT |
-                                      TPMA_SESSION_CONTINUESESSION;
+                                      0; // TPMA_SESSION_CONTINUESESSION;
 
     rc_return = Esys_TRSess_SetAttributes(
         esys_context, session_enc, session_attributes, 0xFF);
     goto_if_tss_error(rc_return, "Error: During SetAttributes", error);
 
-    TPM2B_AUTH auth = {.size = 0, .buffer = {0}};
+    rc_return = Esys_TR_SetAuth(esys_context, session_enc, &auth);
+    goto_if_tss_error(rc_return, "Esys_TR_SetAuth failed", error);
+
     if (seal_key_size && seal_key)
     {
         if (seal_key_size > 64)
@@ -998,10 +1169,11 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
         .size = 0,
         .nvPublic = {
             .nvIndex = TPM_COUNTER_ID,
-            .nameAlg = TPM2_ALG_SHA1,
-            .attributes =
-                (TPMA_NV_OWNERWRITE | TPMA_NV_AUTHWRITE | TPMA_NV_OWNERREAD |
-                 TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
+            .nameAlg = TPM2_ALG_SHA256,
+            .attributes = (
+                // TPMA_NV_OWNERWRITE |
+                TPMA_NV_AUTHWRITE | // TPMA_NV_OWNERREAD |
+                TPMA_NV_AUTHREAD | TPM2_NT_COUNTER << TPMA_NV_TPM2_NT_SHIFT),
             .authPolicy =
                 {
                     .size = 0,
@@ -1032,10 +1204,24 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
 
     TPM2B_MAX_NV_BUFFER* data;
 
+    rc_return = Esys_TR_FromTPMPublic(
+        esys_context,
+        TPM_COUNTER_ID,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &tr_object);
+
+    goto_if_tss_error(
+        rc_return,
+        "Esys_TR_FromTPMPublic, Unable to get index. Not present",
+        error);
+
     // Read encrypted
+    /*
     rc_return = Esys_NV_Read(
         esys_context,
-        nv_handle,
+        tr_object,
         nv_handle,
         session_enc,
         ESYS_TR_NONE,
@@ -1055,7 +1241,7 @@ int tpm_encrypted_session(uint8_t* seal_key, size_t seal_key_size)
     printf(">\n");
 
     Esys_Free(data);
-
+*/
     // List the indexes. Ours will be there
     printf("\nIndex enumeration:\n");
     if (_list_nv_indexes(esys_context) != 0)
@@ -1124,7 +1310,7 @@ int tpm_password_protected_counter(uint8_t* seal_key, size_t seal_key_size)
 
     // make sure it is deleted
     printf("Deleting counter if it exists!\n");
-    if (_delete_nv_counter(esys_context, TPM_COUNTER_ID) != 0)
+    if (_delete_nv_counter(esys_context, &auth, TPM_COUNTER_ID) != 0)
     {
         printf(FAILMSG("Failed to delete counter\n"));
         goto error;
@@ -1141,29 +1327,59 @@ int tpm_password_protected_counter(uint8_t* seal_key, size_t seal_key_size)
     if (_list_nv_indexes(esys_context) != 0)
     {
         printf(FAILMSG("Failed to enumerate counters\n"));
-        goto error;
+        goto error_with_cleanup;
     }
     printf("Incrementing counter...\n");
-    if (_increment_nv_counter(esys_context, TPM_COUNTER_ID) != 0)
+    if (_increment_nv_counter(esys_context, &auth, TPM_COUNTER_ID) != 0)
     {
         printf(FAILMSG("Failed to increment counter\n"));
-        goto error;
+        goto error_with_cleanup;
     }
     printf("Retrieving our index\n");
     if (_read_nv_counter(esys_context, &auth, TPM_COUNTER_ID) != 0)
     {
         printf(FAILMSG("Failed to read counter\n"));
-        goto error;
+        goto error_with_cleanup;
     }
 
-    printf("Deleting the counter we created...\n");
-    if (_delete_nv_counter(esys_context, TPM_COUNTER_ID) != 0)
     {
-        printf(FAILMSG("Failed to delete counter\n"));
-        goto error;
+        ESYS_CONTEXT* different_esys_context = NULL;
+        TPM2B_AUTH different_auth;
+        different_auth.size = 0;
+
+        if (_initialize_esys_ctx(&different_esys_context) != 0)
+        {
+            goto error_with_cleanup;
+        }
+        printf("Retrieving our index from another context with no auth\n");
+        if (_read_nv_counter(
+                different_esys_context, &different_auth, TPM_COUNTER_ID) != 0)
+        {
+            printf(FAILMSG("Failed to read counter\n"));
+            goto error_with_cleanup;
+        }
+
+        printf("Incrementing counter...\n");
+        if (_increment_nv_counter(
+                different_esys_context, &auth, TPM_COUNTER_ID) != 0)
+        {
+            printf(FAILMSG("Failed to increment counter\n"));
+            goto error_with_cleanup;
+        }
+
+        // TODO! HOW THE HECK DID THAT SUCCEED!!!!
+        _deinitialize_esys_ctx(different_esys_context);
     }
 
     return_value = 0;
+
+error_with_cleanup:
+    printf("Deleting the counter we created...\n");
+    if (_delete_nv_counter(esys_context, &auth, TPM_COUNTER_ID) != 0)
+    {
+        printf(FAILMSG("Failed to delete counter\n"));
+        return_value = -1;
+    }
 
 error:
     _deinitialize_esys_ctx(esys_context);

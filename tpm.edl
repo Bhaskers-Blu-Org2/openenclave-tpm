@@ -2,8 +2,39 @@
 // Licensed under the MIT License.
 
 enclave {
+        include "ocall-tbs.h"
+
     trusted {
         public int enclave_tpm_tests();
+    };
+
+    untrusted {
+
+        TBS_RESULT ocall_Tbsip_Submit_Command(
+            uint64_t hContext,
+            uint32_t Locality,
+            uint32_t Priority,
+            [in, count=cbCommand] const uint8_t * pabCommand,
+            uint32_t cbCommand,
+            [out, count=pcbResult_length] int8_t * pabResult,
+            uint32_t pcbResult_length,
+            [in, out] uint32_t* pcbResult_used
+            );
+
+        TBS_RESULT ocall_Tbsip_Context_Close(
+             uint64_t   hContext);
+
+        TBS_RESULT ocall_Tbsip_Cancel_Commands(
+            uint64_t hContext);
+
+        TBS_RESULT ocall_Tbsi_Context_Create(
+            [in] const TBS_CONTEXT_PARAMS *pContextParams,
+            [out] uint64_t * phContext);
+
+        TBS_RESULT ocall_Tbsi_GetDeviceInfo(
+            uint32_t Size,
+            [out, count=Size] uint8_t* Info);
+
     };
 
 };
